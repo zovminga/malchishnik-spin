@@ -743,7 +743,7 @@
       <footer class="footer">
         <p>Одна ссылка — одна игра на всех.</p>
         <div class="footer-tools">
-          <span id="buildTag">build 11</span>
+          <span id="buildTag">build 12</span>
           <button type="button" id="hardResetBtn">сброс кэша</button>
         </div>
       </footer>
@@ -951,7 +951,9 @@
             // Общий раунд на всех устройствах: кто крутил и зачтены ли очки.
             round: null,
             history: [],
-            updatedAt: Date.now(),
+            // Пустой локальный state не должен быть «новее» комнаты по часам —
+            // иначе свежий браузер затирает чужие очки (см. scripts/repro-score-wipe.mjs).
+            updatedAt: 1,
             updatedBy: clientId,
           }
         }
@@ -1058,7 +1060,8 @@
             base.round = null
           }
           base.history = Array.isArray(raw.history) ? raw.history.slice(0, 20) : []
-          base.updatedAt = Number(raw.updatedAt) || Date.now()
+          var ts = Number(raw.updatedAt)
+          base.updatedAt = Number.isFinite(ts) ? ts : Date.now()
           base.updatedBy = raw.updatedBy || ''
           return base
         }
