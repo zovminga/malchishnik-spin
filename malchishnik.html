@@ -252,7 +252,7 @@
           0 0 0 3px #000,
           0 8px 0 #5c0820,
           0 0 28px rgba(255, 20, 147, 0.75);
-        animation: btn-flow 2s linear infinite, btn-thump 1s ease-in-out infinite;
+        animation: btn-flow 2s linear infinite;
         touch-action: manipulation;
       }
 
@@ -262,7 +262,6 @@
           0 0 0 3px #000,
           0 2px 0 #5c0820,
           0 0 18px rgba(255, 20, 147, 0.6);
-        animation: btn-flow 2s linear infinite;
       }
 
       .spin-btn:disabled {
@@ -427,15 +426,6 @@
       @keyframes btn-flow {
         to {
           background-position: 240% 0;
-        }
-      }
-      @keyframes btn-thump {
-        0%,
-        100% {
-          transform: scale(1);
-        }
-        50% {
-          transform: scale(1.03);
         }
       }
       @keyframes blink {
