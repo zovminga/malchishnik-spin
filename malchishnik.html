@@ -849,6 +849,9 @@
         var lastDest = null
         var lastChallenge = null
         var scoredThisRound = false
+        // Игрок, который крутил место в этом раунде — очки всегда ему,
+        // даже если activePlayer уже сменился или кто-то ткнул чип.
+        var roundPlayer = null
         var applyingRemote = false
         var pushTimer = null
         var dbRef = null
@@ -981,11 +984,29 @@
           lastDest = null
           lastChallenge = null
           scoredThisRound = false
+          roundPlayer = null
           els.result.innerHTML = '<p class="result-placeholder">Жми кнопку</p>'
           els.banditBox.classList.remove('show')
           els.challengeOut.textContent = ''
           els.scoreActions.hidden = true
           touch()
+        }
+
+        function placeHasChallenges(dest) {
+          if (!dest) return false
+          var list = state.challenges[dest.id] || []
+          return list.length > 0
+        }
+
+        function roundPlayerName() {
+          if (roundPlayer == null || !state.players[roundPlayer]) return currentName()
+          return state.players[roundPlayer].name
+        }
+
+        function lockRoundAfterScore() {
+          els.scoreActions.hidden = true
+          els.banditBtn.disabled = true
+          els.banditBtn.textContent = 'ОЧКИ ЗАСЧИТАНЫ'
         }
 
         function schedulePush() {
@@ -1132,6 +1153,8 @@
             chip.className = 'player-chip' + (idx === state.activePlayer ? ' active' : '')
             chip.textContent = p.name + ' ' + p.score
             chip.addEventListener('click', function () {
+              // Во время незакрытого раунда чип не меняет, кому пойдут очки.
+              if (lastDest && !scoredThisRound) return
               state.activePlayer = idx
               touch()
             })
@@ -1311,6 +1334,11 @@
             return
           }
           spinning = true
+          // Фиксируем, кому очки за этот спин — до конца раунда.
+          roundPlayer = state.activePlayer
+          lastDest = null
+          lastChallenge = null
+          scoredThisRound = false
           els.spinBtn.disabled = true
           els.spinBtn.textContent = 'КРУТИТСЯ!!!'
           els.banditBox.classList.remove('show')
@@ -1345,14 +1373,15 @@
         }
 
         function spinBandit() {
-          if (banditSpinning || !lastDest) return
+          if (banditSpinning || !lastDest || scoredThisRound) return
           var list = state.challenges[lastDest.id] || []
           if (!list.length) return
           banditSpinning = true
-          scoredThisRound = false
+          // Перекрут задания до зачёта очков — ок. После зачёта — нельзя.
           els.scoreActions.hidden = true
           els.banditBtn.disabled = true
           els.challengeOut.textContent = ''
+          lastChallenge = null
           var first = els.banditReel.querySelector('.bandit-item')
           var itemH = first ? first.getBoundingClientRect().height : 52
           var pick = Math.floor(Math.random() * list.length)
@@ -1367,8 +1396,12 @@
             lastChallenge = list[pick]
             els.challengeOut.textContent = lastChallenge
             banditSpinning = false
+            if (scoredThisRound) {
+              lockRoundAfterScore()
+              return
+            }
             els.banditBtn.disabled = false
-            els.banditBtn.textContent = 'КРУТИТЬ ЗАДАНИЕ ЕЩЁ'
+            els.banditBtn.textContent = 'ДРУГОЕ ЗАДАНИЕ'
             els.scoreActions.hidden = false
             burst(lastDest.color)
           }, BANDIT_MS)
@@ -1376,18 +1409,26 @@
 
         function award(points, note) {
           if (!state.players.length || !lastDest || scoredThisRound) return
+          // Если у места есть бандит — нельзя закрыть раунд без задания
+          // (раньше из‑за этого давало +1 «был там» вместо +2).
+          if (placeHasChallenges(lastDest) && !lastChallenge) {
+            alert('Сначала крутани задание')
+            return
+          }
+          var whoIdx = roundPlayer
+          if (whoIdx == null || !state.players[whoIdx]) whoIdx = state.activePlayer
           scoredThisRound = true
-          state.players[state.activePlayer].score += points
+          state.players[whoIdx].score += points
           state.history.unshift({
-            who: currentName(),
+            who: state.players[whoIdx].name,
             place: lastDest.label,
             challenge: lastChallenge,
             note: note + ' (' + (points >= 0 ? '+' : '') + points + ')',
             color: lastDest.color,
           })
           if (state.history.length > 20) state.history.length = 20
-          state.activePlayer = (state.activePlayer + 1) % state.players.length
-          els.scoreActions.hidden = true
+          state.activePlayer = (whoIdx + 1) % state.players.length
+          lockRoundAfterScore()
           touch()
         }
 
@@ -1511,10 +1552,18 @@
           if (e.key === 'Enter') els.addPlayerBtn.click()
         })
         document.getElementById('doneBtn').addEventListener('click', function () {
-          award(lastChallenge ? 2 : 1, lastChallenge ? 'выполнил' : 'был там')
+          if (placeHasChallenges(lastDest)) {
+            award(2, 'выполнил')
+          } else {
+            award(1, 'был там')
+          }
         })
         document.getElementById('failBtn').addEventListener('click', function () {
-          award(0, lastChallenge ? 'слил' : 'мимо')
+          if (placeHasChallenges(lastDest)) {
+            award(0, 'слил')
+          } else {
+            award(0, 'мимо')
+          }
         })
         els.editorToggle.addEventListener('click', function () {
           els.editor.classList.toggle('show')
@@ -1537,7 +1586,7 @@
 
         document.getElementById('addPlaceBtn').addEventListener('click', function () {
           var id = uid('place')
-          state.destinations.push({
+          state.destinations.unshift({
             id: id,
             label: 'НОВОЕ',
             tagline: 'Описание места',
@@ -1546,6 +1595,9 @@
           })
           state.challenges[id] = []
           touch()
+          // Новое место сверху списка — сразу удобно править.
+          els.editor.classList.add('show')
+          els.editorList.scrollIntoView({ behavior: 'smooth', block: 'start' })
         })
 
         document.getElementById('resetGameBtn').addEventListener('click', resetGame)
