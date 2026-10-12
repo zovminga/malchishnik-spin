@@ -654,21 +654,22 @@
             ★ ОБЩИЙ РЕДАКТОР ★
           </h2>
           <p class="editor-help">
-            С синком правки видят все сразу. Без синка — только этот телефон.
-            Инструкция: файл <code>SYNC.md</code> в репозитории.
+            Все на одной ссылке — одна рулетка, одни места, задания и очки.
+            Жми «★ Места / задания / синк ★», правь список — друзья видят сразу.
           </p>
 
           <div class="panel" style="border-color: var(--cyan); margin-top: 0">
-            <h2>Синхронизация (Firebase)</h2>
-            <p class="editor-help">Вставь firebaseConfig из консоли Firebase. Room — общее имя комнаты.</p>
-            <textarea id="firebaseConfigInput" placeholder='{ "apiKey": "...", "authDomain": "...", "databaseURL": "...", "projectId": "..." }'></textarea>
-            <div class="row" style="margin-top: 0.4rem">
-              <input id="roomInput" type="text" maxlength="40" placeholder="room: malchishnik" value="malchishnik" />
-            </div>
+            <h2>Общая комната</h2>
+            <p class="editor-help">
+              Синк включается сам. Кинь друзьям обычную ссылку на сайт —
+              у всех одна комната. Ничего настраивать не надо.
+            </p>
+            <textarea id="firebaseConfigInput" hidden aria-hidden="true"></textarea>
+            <input id="roomInput" type="hidden" value="malchishnik" />
             <div class="editor-actions">
-              <button type="button" class="cyan" id="connectBtn">Подключить синк</button>
-              <button type="button" class="secondary" id="disconnectBtn">Отключить</button>
-              <button type="button" class="lime" id="shareFriendsBtn">Ссылка для друзей</button>
+              <button type="button" class="lime" id="shareFriendsBtn">Скопировать ссылку</button>
+              <button type="button" class="secondary" id="disconnectBtn" hidden>Отключить</button>
+              <button type="button" class="cyan" id="connectBtn" hidden>Подключить синк</button>
             </div>
           </div>
 
@@ -806,6 +807,18 @@
 
         var LOCAL_KEY = 'malchishnik-state-v2'
         var SYNC_KEY = 'malchishnik-sync-v1'
+        var DEFAULT_ROOM = 'malchishnik'
+        // Публичный веб-конфиг Firebase (для клиента это нормально).
+        // Один раз настроили — сайт сам подключается к общей комнате.
+        var DEFAULT_FIREBASE = {
+          apiKey: 'AIzaSyAz6oFnisHmAHqSVIVxiWUgYHxAfMTcbaI',
+          authDomain: 'malchishnikspin.firebaseapp.com',
+          databaseURL: 'https://malchishnikspin-default-rtdb.firebaseio.com',
+          projectId: 'malchishnikspin',
+          storageBucket: 'malchishnikspin.firebasestorage.app',
+          messagingSenderId: '544589970371',
+          appId: '1:544589970371:web:3d2276094cb22acfed9b76',
+        }
         var clientId = localStorage.getItem('malchishnik-client') || Math.random().toString(36).slice(2, 10)
         localStorage.setItem('malchishnik-client', clientId)
 
@@ -1416,30 +1429,17 @@
         }
 
         function shareFriendsLink() {
-          var sync = null
-          try {
-            sync = JSON.parse(localStorage.getItem(SYNC_KEY) || 'null')
-          } catch (e) {}
-          var payload = {
-            sync: sync,
-            state: state,
-          }
-          try {
-            var encoded = btoa(unescape(encodeURIComponent(JSON.stringify(payload))))
-            var url = location.origin + location.pathname + '#room=' + encoded
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-              navigator.clipboard.writeText(url).then(
-                function () {
-                  alert('Ссылка скопирована — кидай в чат. У всех будет та же комната.')
-                },
-                function () {
-                  prompt('Скопируй ссылку:', url)
-                },
-              )
-            } else prompt('Скопируй ссылку:', url)
-          } catch (e) {
-            alert('Слишком длинно для ссылки. Друзьям: тот же firebaseConfig + room.')
-          }
+          var url = location.origin + location.pathname
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(url).then(
+              function () {
+                alert('Ссылка скопирована — кидай в чат. Открыли → уже в общей комнате.')
+              },
+              function () {
+                prompt('Скопируй ссылку:', url)
+              },
+            )
+          } else prompt('Скопируй ссылку:', url)
         }
 
         function tryBootFromHash() {
@@ -1608,7 +1608,12 @@
         renderAll()
         tryBootFromHash()
         if (!dbRef) tryBootSavedSync()
-        if (!dbRef) setSyncStatus('local', '● Локально — включи синк, чтобы все были в одной рулетке')
+        if (!dbRef) {
+          els.firebaseConfigInput.value = JSON.stringify(DEFAULT_FIREBASE, null, 2)
+          els.roomInput.value = DEFAULT_ROOM
+          connectFirebase(DEFAULT_FIREBASE, DEFAULT_ROOM)
+        }
+        if (!dbRef) setSyncStatus('local', '● Локально — синк не поднялся')
       })()
     </script>
   </body>
