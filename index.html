@@ -2,16 +2,1619 @@
 <html lang="ru">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
-      name="description"
-      content="Рулетка мальчишника — крути и решай, куда идти дальше."
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
     />
+    <meta name="color-scheme" content="dark" />
     <title>МАЛЬЧИШНИК — рулетка</title>
+    <style>
+      :root {
+        --gold: #ffe566;
+        --pink: #ff1493;
+        --cyan: #00fff0;
+        --lime: #b8ff00;
+        --red: #ff003c;
+        --orange: #ff6a00;
+        --purple: #b14cff;
+        --ink: #fff8e7;
+        --muted: #d7e0d7;
+        --bg: #120018;
+      }
+
+      * {
+        box-sizing: border-box;
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background: #000;
+        color: var(--ink);
+        font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+      }
+
+      body {
+        min-height: 100vh;
+        min-height: 100dvh;
+        overflow-x: hidden;
+      }
+
+      .bg {
+        position: fixed;
+        inset: 0;
+        z-index: 0;
+        background:
+          radial-gradient(circle at 20% 20%, rgba(255, 20, 147, 0.55), transparent 35%),
+          radial-gradient(circle at 80% 15%, rgba(0, 255, 240, 0.45), transparent 35%),
+          radial-gradient(circle at 50% 80%, rgba(184, 255, 0, 0.3), transparent 40%),
+          linear-gradient(160deg, #1a0040 0%, #04150c 40%, #3a0018 100%);
+      }
+
+      .stars {
+        position: fixed;
+        inset: 0;
+        z-index: 0;
+        pointer-events: none;
+        overflow: hidden;
+      }
+
+      .star {
+        position: absolute;
+        color: var(--gold);
+        font-size: 1.1rem;
+        font-weight: 900;
+        animation: star-spin 2.4s linear infinite;
+        text-shadow: 0 0 8px currentColor;
+        opacity: 0.85;
+      }
+
+      .page {
+        position: relative;
+        z-index: 1;
+        min-height: 100vh;
+        min-height: 100dvh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 0.5rem 0.75rem 1.5rem;
+        padding-bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));
+      }
+
+      .page.flash::after {
+        content: '★ ДЖЕКПОТ ★';
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: clamp(2rem, 10vw, 4rem);
+        font-weight: 900;
+        letter-spacing: 0.08em;
+        color: #000;
+        background: repeating-linear-gradient(
+          45deg,
+          var(--gold),
+          var(--gold) 20px,
+          var(--pink) 20px,
+          var(--pink) 40px,
+          var(--cyan) 40px,
+          var(--cyan) 60px
+        );
+        animation: flash-banner 0.85s steps(3) forwards;
+        z-index: 10;
+        pointer-events: none;
+        text-shadow: 3px 3px 0 #fff;
+      }
+
+      .ticker {
+        width: 100vw;
+        overflow: hidden;
+        background: #000;
+        border-block: 4px solid transparent;
+        border-image: linear-gradient(90deg, var(--pink), var(--gold), var(--cyan), var(--lime), var(--pink)) 1;
+        margin-bottom: 0.35rem;
+      }
+
+      .ticker.alt {
+        border-image: linear-gradient(90deg, var(--lime), var(--purple), var(--red), var(--gold), var(--lime)) 1;
+      }
+
+      .ticker-track {
+        display: flex;
+        width: max-content;
+        gap: 1rem;
+        padding: 0.35rem 0;
+        font-size: 0.78rem;
+        font-weight: 900;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--lime);
+        animation: ticker 10s linear infinite;
+      }
+
+      .ticker.alt .ticker-track {
+        animation-direction: reverse;
+        animation-duration: 13s;
+        color: var(--pink);
+      }
+
+      .ticker span:nth-child(3n) {
+        color: var(--cyan);
+      }
+      .ticker span:nth-child(4n) {
+        color: var(--gold);
+      }
+      .ticker span:nth-child(5n) {
+        color: var(--pink);
+      }
+
+      .hero {
+        width: min(100%, 27rem);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        gap: 0.4rem;
+      }
+
+      .badge-row {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 0.4rem;
+        width: 100%;
+      }
+
+      .badge {
+        padding: 0.25rem 0.55rem;
+        border: 2px solid #fff;
+        font-size: 0.68rem;
+        font-weight: 900;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        animation: badge-wiggle 0.9s ease-in-out infinite;
+      }
+
+      .badge:nth-child(1) {
+        background: var(--red);
+      }
+      .badge:nth-child(2) {
+        background: var(--purple);
+        animation-delay: 0.15s;
+      }
+      .badge:nth-child(3) {
+        background: var(--cyan);
+        color: #001;
+        animation-delay: 0.3s;
+      }
+      .badge:nth-child(4) {
+        background: var(--lime);
+        color: #001;
+        animation-delay: 0.45s;
+      }
+
+      .brand {
+        margin: 0.1rem 0 0;
+        font-size: clamp(2.3rem, 12vw, 4.6rem);
+        line-height: 0.92;
+        font-weight: 900;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+        color: var(--gold);
+        text-shadow:
+          4px 0 var(--pink),
+          -4px 0 var(--cyan),
+          0 4px 0 #000,
+          0 0 18px var(--gold);
+        animation: brand-bounce 0.7s ease-in-out infinite, brand-hue 2s steps(4) infinite;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(1.15rem, 5.2vw, 1.75rem);
+        font-weight: 900;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--gold);
+        text-shadow:
+          0 0 10px var(--pink),
+          2px 0 var(--cyan),
+          -2px 0 var(--lime);
+        animation: brand-hue 1.4s steps(4) infinite;
+      }
+
+      .lede {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.95rem;
+        font-weight: 700;
+        line-height: 1.35;
+        max-width: 22rem;
+      }
+
+      .players {
+        width: 100%;
+        margin-top: 0.35rem;
+        padding: 0.7rem;
+        background: rgba(0, 0, 0, 0.45);
+        border: 2px dashed var(--gold);
+        text-align: left;
+      }
+
+      .players h2,
+      .bandit-box h2,
+      .history h2,
+      .scoreboard h2 {
+        margin: 0 0 0.45rem;
+        font-size: 0.85rem;
+        letter-spacing: 0.14em;
+        color: var(--gold);
+        font-weight: 900;
+        text-transform: uppercase;
+      }
+
+      .player-add {
+        display: flex;
+        gap: 0.4rem;
+        margin-bottom: 0.5rem;
+      }
+
+      .player-add input {
+        flex: 1;
+        min-width: 0;
+        border: 2px solid var(--cyan);
+        background: #000;
+        color: #fff;
+        padding: 0.55rem 0.65rem;
+        font-size: 1rem;
+        font-weight: 700;
+      }
+
+      .player-add button,
+      .chip-btn,
+      .score-btn {
+        appearance: none;
+        border: 2px solid #fff;
+        background: var(--pink);
+        color: #fff;
+        font-weight: 900;
+        padding: 0.55rem 0.7rem;
+        cursor: pointer;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        touch-action: manipulation;
+      }
+
+      .score-btn.ok {
+        background: #2ecc71;
+        color: #04150a;
+      }
+
+      .score-btn.fail {
+        background: #555;
+      }
+
+      .player-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+      }
+
+      .player-chip {
+        border: 2px solid #fff;
+        background: #222;
+        color: #fff;
+        font-weight: 800;
+        font-size: 0.85rem;
+        padding: 0.35rem 0.55rem;
+        cursor: pointer;
+      }
+
+      .player-chip.active {
+        background: var(--lime);
+        color: #04150a;
+        box-shadow: 0 0 12px var(--lime);
+      }
+
+      .player-chip .pts {
+        color: var(--gold);
+        margin-left: 0.25rem;
+      }
+
+      .player-chip.active .pts {
+        color: #04150a;
+      }
+
+      .turn-line {
+        margin: 0.45rem 0 0;
+        font-size: 0.9rem;
+        font-weight: 800;
+        color: var(--cyan);
+      }
+
+      .roulette {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.9rem;
+        margin-top: 0.35rem;
+      }
+
+      .wheel-stage {
+        position: relative;
+        width: min(84vw, 21.5rem);
+        aspect-ratio: 1 / 1;
+        margin: 0.6rem 0;
+      }
+
+      .burst-rays {
+        position: absolute;
+        inset: -18%;
+        border-radius: 50%;
+        background: repeating-conic-gradient(
+          from 0deg,
+          rgba(255, 229, 102, 0.35) 0deg 8deg,
+          transparent 8deg 16deg
+        );
+        animation: spin-cw 4s linear infinite;
+        z-index: 0;
+        pointer-events: none;
+      }
+
+      .wheel-stage::before,
+      .wheel-stage::after {
+        content: '';
+        position: absolute;
+        border-radius: 50%;
+        pointer-events: none;
+        z-index: 2;
+      }
+
+      .wheel-stage::before {
+        inset: -10px;
+        border: 3px dashed var(--cyan);
+        animation: spin-cw 6s linear infinite;
+      }
+
+      .wheel-stage::after {
+        inset: -18px;
+        border: 3px dotted var(--pink);
+        animation: spin-ccw 4s linear infinite;
+      }
+
+      .wheel-stage.spinning .burst-rays {
+        animation-duration: 0.35s;
+      }
+
+      .wheel-stage.win {
+        animation: win-pop 0.55s ease-out;
+      }
+
+      .pointer {
+        position: absolute;
+        top: -8px;
+        left: 50%;
+        z-index: 4;
+        width: 0;
+        height: 0;
+        transform: translateX(-50%);
+        border-left: 16px solid transparent;
+        border-right: 16px solid transparent;
+        border-top: 34px solid var(--gold);
+        filter: drop-shadow(0 0 8px var(--gold));
+        animation: pointer-bounce 0.45s ease-in-out infinite;
+      }
+
+      .wheel {
+        position: relative;
+        z-index: 1;
+        width: 100%;
+        height: 100%;
+        border-radius: 50%;
+        will-change: transform;
+        box-shadow:
+          0 0 0 5px var(--gold),
+          0 0 0 10px #000,
+          0 0 0 14px var(--pink),
+          0 0 28px var(--cyan);
+        animation: wheel-glow 1s steps(2) infinite;
+      }
+
+      .wheel svg {
+        width: 100%;
+        height: 100%;
+        display: block;
+        border-radius: 50%;
+      }
+
+      .bulb {
+        animation: bulb-blink 0.55s steps(2) infinite;
+      }
+
+      .spin-btn,
+      .bandit-btn {
+        appearance: none;
+        -webkit-appearance: none;
+        border: 4px solid #fff;
+        border-radius: 999px;
+        background: linear-gradient(
+          90deg,
+          var(--pink),
+          var(--red),
+          var(--orange),
+          var(--gold),
+          var(--lime),
+          var(--cyan),
+          var(--purple),
+          var(--pink)
+        );
+        background-size: 300% 100%;
+        color: #fff;
+        font-size: clamp(1.15rem, 5vw, 1.55rem);
+        font-weight: 900;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        padding: 1.05rem 1.3rem;
+        width: min(100%, 20rem);
+        min-height: 58px;
+        cursor: pointer;
+        text-shadow: 2px 2px 0 #000;
+        box-shadow:
+          0 0 0 4px #000,
+          0 8px 0 #5c0820,
+          0 0 24px var(--pink);
+        animation: btn-flow 1.2s linear infinite;
+        touch-action: manipulation;
+      }
+
+      .bandit-btn {
+        background: linear-gradient(90deg, #111, #444, #ffe566, #111);
+        background-size: 300% 100%;
+        margin-top: 0.6rem;
+      }
+
+      .spin-btn:active:not(:disabled),
+      .bandit-btn:active:not(:disabled) {
+        transform: translateY(6px);
+        box-shadow:
+          0 0 0 4px #000,
+          0 2px 0 #5c0820,
+          0 0 18px var(--pink);
+      }
+
+      .spin-btn:disabled,
+      .bandit-btn:disabled {
+        cursor: wait;
+      }
+
+      .result {
+        min-height: 5.2rem;
+        width: 100%;
+        margin-top: 0.2rem;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.15rem;
+      }
+
+      .result-kicker {
+        margin: 0;
+        font-size: 0.9rem;
+        font-weight: 900;
+        letter-spacing: 0.28em;
+        color: var(--cyan);
+        animation: blink 0.4s steps(2) infinite;
+      }
+
+      .result-label {
+        margin: 0;
+        font-size: clamp(2rem, 11vw, 3.4rem);
+        font-weight: 900;
+        line-height: 0.95;
+        text-shadow:
+          3px 0 var(--cyan),
+          -3px 0 var(--pink),
+          0 4px 0 #000;
+        animation: slam 0.45s cubic-bezier(0.2, 1.6, 0.4, 1);
+      }
+
+      .result-tagline {
+        margin: 0.25rem 0 0;
+        font-size: 0.98rem;
+        font-weight: 800;
+        line-height: 1.35;
+        max-width: 22rem;
+        padding: 0.35rem 0.6rem;
+        background: rgba(0, 0, 0, 0.55);
+        border: 2px dashed var(--gold);
+      }
+
+      .result-placeholder {
+        margin: 0.55rem 0 0;
+        color: var(--lime);
+        font-size: 1.05rem;
+        font-weight: 900;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        animation: blink 0.7s steps(2) infinite;
+      }
+
+      .bandit-box {
+        width: 100%;
+        margin-top: 0.75rem;
+        padding: 0.75rem;
+        background: rgba(0, 0, 0, 0.55);
+        border: 3px solid var(--gold);
+        display: none;
+      }
+
+      .bandit-box.show {
+        display: block;
+        animation: slam 0.4s ease-out;
+      }
+
+      .bandit-window {
+        position: relative;
+        overflow: hidden;
+        height: 3.4rem;
+        border: 3px solid var(--cyan);
+        background: #0a0a0a;
+        margin: 0.4rem 0;
+      }
+
+      .bandit-window::before,
+      .bandit-window::after {
+        content: '';
+        position: absolute;
+        left: 0;
+        right: 0;
+        height: 1rem;
+        z-index: 2;
+        pointer-events: none;
+      }
+
+      .bandit-window::before {
+        top: 0;
+        background: linear-gradient(#000, transparent);
+      }
+
+      .bandit-window::after {
+        bottom: 0;
+        background: linear-gradient(transparent, #000);
+      }
+
+      .bandit-reel {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 0;
+        will-change: transform;
+      }
+
+      .bandit-item {
+        height: 3.4rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0 0.5rem;
+        font-weight: 900;
+        font-size: 0.95rem;
+        text-align: center;
+        border-bottom: 1px solid #333;
+      }
+
+      .bandit-item:nth-child(odd) {
+        background: #151515;
+      }
+
+      .challenge-out {
+        margin: 0.35rem 0 0;
+        font-size: 1.05rem;
+        font-weight: 900;
+        color: var(--lime);
+        text-shadow: 0 0 10px var(--lime);
+        min-height: 1.4em;
+      }
+
+      .score-actions {
+        display: flex;
+        gap: 0.4rem;
+        margin-top: 0.65rem;
+      }
+
+      .score-actions .score-btn {
+        flex: 1;
+      }
+
+      .scoreboard {
+        width: min(100%, 27rem);
+        margin-top: 1rem;
+        text-align: left;
+      }
+
+      .scoreboard ol {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+      }
+
+      .scoreboard li {
+        display: flex;
+        justify-content: space-between;
+        gap: 0.5rem;
+        font-weight: 800;
+        padding: 0.35rem 0.5rem;
+        background: rgba(0, 0, 0, 0.4);
+        border-left: 4px solid var(--pink);
+      }
+
+      .scoreboard li.leader {
+        border-left-color: var(--lime);
+        box-shadow: 0 0 12px rgba(184, 255, 0, 0.35);
+      }
+
+      .history {
+        width: min(100%, 27rem);
+        margin-top: 1rem;
+        text-align: left;
+      }
+
+      .history ol {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+      }
+
+      .history li {
+        font-weight: 700;
+        font-size: 0.9rem;
+        padding: 0.4rem 0.5rem;
+        background: rgba(0, 0, 0, 0.35);
+        border-left: 4px solid var(--cyan);
+        line-height: 1.3;
+      }
+
+      .history .who {
+        color: var(--gold);
+      }
+
+      .footer {
+        margin-top: auto;
+        padding-top: 1.5rem;
+        color: rgba(215, 224, 215, 0.85);
+        font-size: 0.78rem;
+        font-weight: 700;
+        text-align: center;
+      }
+
+      .footer p {
+        margin: 0;
+      }
+
+      .fx {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        z-index: 8;
+        overflow: hidden;
+      }
+
+      .spark {
+        position: absolute;
+        width: 10px;
+        height: 10px;
+        border-radius: 2px;
+        animation: spark 0.9s ease-out forwards;
+      }
+
+      .float-chip {
+        position: fixed;
+        z-index: 0;
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        border: 3px dashed #fff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.65rem;
+        font-weight: 900;
+        color: #fff;
+        pointer-events: none;
+        animation: chip-float 6s linear infinite;
+      }
+
+      @keyframes star-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      @keyframes ticker {
+        to {
+          transform: translateX(-50%);
+        }
+      }
+      @keyframes badge-wiggle {
+        0%,
+        100% {
+          transform: rotate(-4deg) scale(1);
+        }
+        50% {
+          transform: rotate(4deg) scale(1.08);
+        }
+      }
+      @keyframes brand-bounce {
+        0%,
+        100% {
+          transform: scale(1) rotate(-1deg);
+        }
+        50% {
+          transform: scale(1.06) rotate(1deg);
+        }
+      }
+      @keyframes brand-hue {
+        0% {
+          color: var(--gold);
+        }
+        25% {
+          color: var(--pink);
+        }
+        50% {
+          color: var(--cyan);
+        }
+        75% {
+          color: var(--lime);
+        }
+        100% {
+          color: var(--gold);
+        }
+      }
+      @keyframes spin-cw {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      @keyframes spin-ccw {
+        to {
+          transform: rotate(-360deg);
+        }
+      }
+      @keyframes pointer-bounce {
+        0%,
+        100% {
+          transform: translateX(-50%) translateY(0);
+        }
+        50% {
+          transform: translateX(-50%) translateY(5px);
+        }
+      }
+      @keyframes bulb-blink {
+        50% {
+          opacity: 0.2;
+        }
+      }
+      @keyframes wheel-glow {
+        0% {
+          box-shadow:
+            0 0 0 5px var(--gold),
+            0 0 0 10px #000,
+            0 0 0 14px var(--pink),
+            0 0 28px var(--cyan);
+        }
+        50% {
+          box-shadow:
+            0 0 0 5px var(--cyan),
+            0 0 0 10px #000,
+            0 0 0 14px var(--lime),
+            0 0 34px var(--pink);
+        }
+      }
+      @keyframes btn-flow {
+        to {
+          background-position: 300% 0;
+        }
+      }
+      @keyframes blink {
+        50% {
+          opacity: 0.25;
+        }
+      }
+      @keyframes slam {
+        from {
+          transform: scale(1.5);
+          opacity: 0;
+        }
+        to {
+          transform: scale(1);
+          opacity: 1;
+        }
+      }
+      @keyframes win-pop {
+        0% {
+          transform: scale(1);
+        }
+        40% {
+          transform: scale(1.06);
+        }
+        100% {
+          transform: scale(1);
+        }
+      }
+      @keyframes flash-banner {
+        0%,
+        30% {
+          opacity: 1;
+        }
+        40%,
+        55% {
+          opacity: 0.2;
+        }
+        60%,
+        80% {
+          opacity: 1;
+        }
+        100% {
+          opacity: 0;
+        }
+      }
+      @keyframes spark {
+        from {
+          transform: translate(0, 0) scale(1);
+          opacity: 1;
+        }
+        to {
+          transform: translate(var(--dx), var(--dy)) scale(0);
+          opacity: 0;
+        }
+      }
+      @keyframes chip-float {
+        from {
+          transform: translateY(110vh) rotate(0);
+          opacity: 0;
+        }
+        10% {
+          opacity: 0.9;
+        }
+        to {
+          transform: translateY(-20vh) rotate(360deg);
+          opacity: 0;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .star,
+        .ticker-track,
+        .badge,
+        .brand,
+        h1,
+        .burst-rays,
+        .wheel-stage::before,
+        .wheel-stage::after,
+        .pointer,
+        .bulb,
+        .wheel,
+        .spin-btn,
+        .bandit-btn,
+        .result-kicker,
+        .result-placeholder,
+        .float-chip {
+          animation: none !important;
+        }
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <div class="bg" aria-hidden="true"></div>
+    <div class="stars" id="stars" aria-hidden="true"></div>
+    <div class="fx" id="fx" aria-hidden="true"></div>
+
+    <div class="page" id="page">
+      <div class="ticker" aria-hidden="true">
+        <div class="ticker-track" id="tickerA"></div>
+      </div>
+      <div class="ticker alt" aria-hidden="true">
+        <div class="ticker-track" id="tickerB"></div>
+      </div>
+
+      <main class="hero">
+        <div class="badge-row" aria-hidden="true">
+          <span class="badge">HOT</span>
+          <span class="badge">18+</span>
+          <span class="badge">NO REFUND</span>
+          <span class="badge">PVP</span>
+        </div>
+
+        <p class="brand">МАЛЬЧИШНИК</p>
+        <h1>Куда идём дальше?</h1>
+        <p class="lede">
+          Сначала место. Потом задание. Кто выполнил — забирает очки.
+        </p>
+
+        <section class="players" aria-label="Игроки">
+          <h2>★ Кто крутит ★</h2>
+          <div class="player-add">
+            <input id="playerInput" type="text" maxlength="18" placeholder="Имя / ник" />
+            <button type="button" id="addPlayerBtn">+</button>
+          </div>
+          <div class="player-list" id="playerList"></div>
+          <p class="turn-line" id="turnLine">Добавь игроков — и погнали</p>
+        </section>
+
+        <div class="roulette">
+          <div class="wheel-stage" id="stage">
+            <div class="burst-rays" aria-hidden="true"></div>
+            <div class="pointer" aria-hidden="true"></div>
+            <div class="wheel" id="wheel"></div>
+          </div>
+          <button type="button" class="spin-btn" id="spinBtn">КРУТИТЬ МЕСТО!!!</button>
+        </div>
+
+        <div class="result" id="result" aria-live="polite">
+          <p class="result-placeholder">Жми кнопку</p>
+        </div>
+
+        <section class="bandit-box" id="banditBox" aria-label="Задание">
+          <h2>★ Однорукий бандит — задание ★</h2>
+          <div class="bandit-window">
+            <div class="bandit-reel" id="banditReel"></div>
+          </div>
+          <button type="button" class="bandit-btn" id="banditBtn">КРУТИТЬ ЗАДАНИЕ</button>
+          <p class="challenge-out" id="challengeOut"></p>
+          <div class="score-actions" id="scoreActions" hidden>
+            <button type="button" class="score-btn ok" id="doneBtn">+2 выполнил</button>
+            <button type="button" class="score-btn fail" id="failBtn">+0 слил</button>
+          </div>
+        </section>
+      </main>
+
+      <section class="scoreboard" id="scoreboard" hidden>
+        <h2>★ Таблица ★</h2>
+        <ol id="scoreList"></ol>
+      </section>
+
+      <section class="history" id="history" hidden>
+        <h2>★ Лог ночи ★</h2>
+        <ol id="historyList"></ol>
+      </section>
+
+      <footer class="footer">
+        <p>Место → задание → очки. Жених тоже играет — без скидок.</p>
+      </footer>
+    </div>
+
+    <script>
+      (function () {
+        var DESTINATIONS = [
+          {
+            id: 'casino',
+            label: 'КАЗИНО',
+            tagline: 'Стол, фишки, минус депозит.',
+            color: '#ff003c',
+            text: '#fff8e7',
+          },
+          {
+            id: 'bar',
+            label: 'БАР',
+            tagline: 'Шоты по кругу. Без обсуждений.',
+            color: '#1a6bff',
+            text: '#f0f7ff',
+          },
+          {
+            id: 'strip',
+            label: 'СТРИПУХА',
+            tagline: 'Неон, дым, нулевая память.',
+            color: '#ff1493',
+            text: '#fff0f5',
+          },
+          {
+            id: 'kc',
+            label: 'KC GRAD',
+            tagline: 'Выпало — едем. Точка.',
+            color: '#b8ff00',
+            text: '#04150a',
+          },
+          {
+            id: 'comps',
+            label: 'КОМПЫ',
+            tagline: 'Интернет-клуб. Реванш обязателен.',
+            color: '#ff9f1a',
+            text: '#1a0d00',
+          },
+          {
+            id: 'range',
+            label: 'ТИР',
+            tagline: 'Стрельбище. Патроны за свой счёт.',
+            color: '#2ecc71',
+            text: '#04150a',
+          },
+          {
+            id: 'thirtythree',
+            label: '33',
+            tagline: 'Поиграть в «33». Проигравший платит круг.',
+            color: '#00bcd4',
+            text: '#041018',
+          },
+          {
+            id: 'guinness',
+            label: 'ГИННЕС',
+            tagline: 'Найти Guinness и выпить на стене Калемегдана.',
+            color: '#8B4513',
+            text: '#fff8e7',
+          },
+          {
+            id: 'pokemon',
+            label: 'ПОКЕМОН',
+            tagline: 'Покупать карты, пока не выпадет что-то ценное.',
+            color: '#ffeb3b',
+            text: '#1a1200',
+          },
+        ]
+
+        // Второй спин — не для всех мест.
+        var CHALLENGES = {
+          bar: [
+            'Угостить всех пивом',
+            'Коктейль от бармена «на усмотрение»',
+            'Шот за жениха без рук',
+            'Выпить то, что закажут друзья',
+            'Познакомиться с соседним столом',
+            'Спеть тост стоя на стуле',
+          ],
+          casino: [
+            'Только красное 3 раунда подряд',
+            'Поставить на зеро хотя бы раз',
+            'Удвоить после проигрыша',
+            'Сыграть рулетку с минималкой x5',
+            'Все фишки в одну игру',
+          ],
+          strip: [
+            'Заказать танец жениху',
+            'Не смотреть в телефон 20 минут',
+            'Оставить чаевые только монетами',
+            'Сказать комплимент охране',
+          ],
+          comps: [
+            'Победить в 1v1',
+            'Играть только одной рукой',
+            'Сменить ник на «жених»',
+            'Проиграть — ставишь шоты',
+          ],
+          range: [
+            'Лучший результат в группе',
+            'Стрелять слабой рукой',
+            'Серия из 3 попаданий',
+            'Проигравший покупает патроны',
+          ],
+          thirtythree: [
+            'Играть до 2 побед',
+            'Проигравший — следующий круг',
+            'Без подсказок со стороны',
+            'Жених раздаёт первой колодой',
+          ],
+          pokemon: [
+            'Открывать пачки по очереди',
+            'Первый хит — победитель раунда',
+            'Нельзя покупать >N пачек (решаете сами)',
+            'Дубль карты = штрафной шот',
+          ],
+          guinness: [
+            'Пить только сидя на стене',
+            'Фото с банкой — обязательно',
+            'Кто последний сел — допивает',
+            'Донести Guinness не расплескав',
+          ],
+          // KC Grad — без бандита: само место уже квест
+        }
+
+        var SPIN_MS = 5600
+        var BANDIT_MS = 2800
+        var MIN_TURNS = 7
+        var slice = 360 / DESTINATIONS.length
+        var rotation = 0
+        var spinning = false
+        var banditSpinning = false
+        var history = []
+        var players = []
+        var activePlayer = 0
+        var lastDest = null
+        var lastChallenge = null
+        var scoredThisRound = false
+
+        var wheelEl = document.getElementById('wheel')
+        var stageEl = document.getElementById('stage')
+        var btn = document.getElementById('spinBtn')
+        var resultEl = document.getElementById('result')
+        var pageEl = document.getElementById('page')
+        var historySection = document.getElementById('history')
+        var historyList = document.getElementById('historyList')
+        var fx = document.getElementById('fx')
+        var stars = document.getElementById('stars')
+        var banditBox = document.getElementById('banditBox')
+        var banditReel = document.getElementById('banditReel')
+        var banditBtn = document.getElementById('banditBtn')
+        var challengeOut = document.getElementById('challengeOut')
+        var scoreActions = document.getElementById('scoreActions')
+        var playerInput = document.getElementById('playerInput')
+        var addPlayerBtn = document.getElementById('addPlayerBtn')
+        var playerList = document.getElementById('playerList')
+        var turnLine = document.getElementById('turnLine')
+        var scoreboard = document.getElementById('scoreboard')
+        var scoreList = document.getElementById('scoreList')
+
+        function polar(cx, cy, r, angleDeg) {
+          var rad = ((angleDeg - 90) * Math.PI) / 180
+          return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) }
+        }
+
+        function slicePath(cx, cy, r, startAngle, endAngle) {
+          var start = polar(cx, cy, r, endAngle)
+          var end = polar(cx, cy, r, startAngle)
+          var large = endAngle - startAngle <= 180 ? 0 : 1
+          return (
+            'M ' +
+            cx +
+            ' ' +
+            cy +
+            ' L ' +
+            start.x +
+            ' ' +
+            start.y +
+            ' A ' +
+            r +
+            ' ' +
+            r +
+            ' 0 ' +
+            large +
+            ' 0 ' +
+            end.x +
+            ' ' +
+            end.y +
+            ' Z'
+          )
+        }
+
+        function esc(s) {
+          return String(s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/"/g, '&quot;')
+        }
+
+        function currentName() {
+          if (!players.length) return 'Гость'
+          return players[activePlayer].name
+        }
+
+        function fillTicker(el, items) {
+          var html = ''
+          for (var loop = 0; loop < 2; loop++) {
+            for (var i = 0; i < items.length; i++) {
+              html += '<span>' + items[i] + '</span><span>★</span>'
+            }
+          }
+          el.innerHTML = html
+        }
+
+        function renderDecor() {
+          fillTicker(
+            document.getElementById('tickerA'),
+            DESTINATIONS.map(function (d) {
+              return d.label
+            }).concat(['КРУТИ', 'PVP']),
+          )
+          fillTicker(document.getElementById('tickerB'), [
+            'МЕСТО',
+            'ЗАДАНИЕ',
+            'ОЧКИ',
+            'NO REFUND',
+            'SPIN',
+            '33',
+            'ГИННЕС',
+          ])
+
+          var colors = ['#ffe566', '#ff1493', '#00fff0', '#b8ff00', '#ff6a00', '#b14cff']
+          var html = ''
+          for (var i = 0; i < 12; i++) {
+            html +=
+              '<span class="star" style="left:' +
+              Math.random() * 100 +
+              '%;top:' +
+              Math.random() * 100 +
+              '%;color:' +
+              colors[i % colors.length] +
+              ';animation-delay:-' +
+              (Math.random() * 4).toFixed(2) +
+              's">★</span>'
+          }
+          stars.innerHTML = html
+
+          var chipColors = ['#ff003c', '#1a6bff', '#111', '#b8ff00']
+          for (var c = 0; c < 5; c++) {
+            var chip = document.createElement('div')
+            chip.className = 'float-chip'
+            chip.textContent = '$'
+            chip.style.left = 8 + Math.random() * 84 + '%'
+            chip.style.background = chipColors[c % chipColors.length]
+            chip.style.animationDelay = -Math.random() * 6 + 's'
+            chip.style.animationDuration = 5 + Math.random() * 5 + 's'
+            document.body.appendChild(chip)
+          }
+        }
+
+        function renderWheel() {
+          var fontSize = DESTINATIONS.length > 7 ? 11 : 13
+          var bulbs = ''
+          var i
+          for (i = 0; i < 32; i++) {
+            var a = (i / 32) * 360
+            var p = polar(200, 200, 194, a)
+            var fill =
+              i % 4 === 0 ? '#ffe566' : i % 4 === 1 ? '#00fff0' : i % 4 === 2 ? '#ff1493' : '#b8ff00'
+            bulbs +=
+              '<circle class="bulb" cx="' +
+              p.x +
+              '" cy="' +
+              p.y +
+              '" r="4" fill="' +
+              fill +
+              '"></circle>'
+          }
+
+          var segments = ''
+          for (i = 0; i < DESTINATIONS.length; i++) {
+            var d = DESTINATIONS[i]
+            var start = i * slice
+            var end = start + slice
+            var mid = start + slice / 2
+            var label = polar(200, 200, 118, mid)
+            segments +=
+              '<g>' +
+              '<path d="' +
+              slicePath(200, 200, 190, start, end) +
+              '" fill="' +
+              d.color +
+              '" stroke="#120018" stroke-width="3"></path>' +
+              '<text x="' +
+              label.x +
+              '" y="' +
+              label.y +
+              '" fill="' +
+              d.text +
+              '" font-size="' +
+              fontSize +
+              '" font-family="system-ui,-apple-system,sans-serif" font-weight="900" text-anchor="middle" dominant-baseline="middle" transform="rotate(' +
+              mid +
+              ', ' +
+              label.x +
+              ', ' +
+              label.y +
+              ')">' +
+              esc(d.label) +
+              '</text>' +
+              '</g>'
+          }
+
+          wheelEl.innerHTML =
+            '<svg viewBox="0 0 400 400" role="img" aria-label="Рулетка мест">' +
+            '<circle cx="200" cy="200" r="198" fill="#120018"></circle>' +
+            segments +
+            '<circle cx="200" cy="200" r="190" fill="none" stroke="#ffe566" stroke-width="8"></circle>' +
+            bulbs +
+            '<circle cx="200" cy="200" r="44" fill="#120018" stroke="#ffe566" stroke-width="6"></circle>' +
+            '<circle cx="200" cy="200" r="28" fill="#ffe566"></circle>' +
+            '<text x="200" y="206" text-anchor="middle" font-family="system-ui,-apple-system,sans-serif" font-size="12" font-weight="900" fill="#1a0d00">SPIN</text>' +
+            '</svg>'
+        }
+
+        function renderPlayers() {
+          playerList.innerHTML = ''
+          for (var i = 0; i < players.length; i++) {
+            ;(function (idx) {
+              var chip = document.createElement('button')
+              chip.type = 'button'
+              chip.className = 'player-chip' + (idx === activePlayer ? ' active' : '')
+              chip.innerHTML =
+                esc(players[idx].name) + '<span class="pts">' + players[idx].score + '</span>'
+              chip.addEventListener('click', function () {
+                activePlayer = idx
+                renderPlayers()
+                updateTurn()
+              })
+              playerList.appendChild(chip)
+            })(i)
+          }
+          updateTurn()
+          renderScoreboard()
+        }
+
+        function updateTurn() {
+          if (!players.length) {
+            turnLine.textContent = 'Добавь игроков — и погнали'
+            return
+          }
+          turnLine.textContent = 'Сейчас крутит: ' + currentName()
+        }
+
+        function renderScoreboard() {
+          if (!players.length) {
+            scoreboard.hidden = true
+            return
+          }
+          scoreboard.hidden = false
+          var sorted = players.slice().sort(function (a, b) {
+            return b.score - a.score
+          })
+          var html = ''
+          for (var i = 0; i < sorted.length; i++) {
+            html +=
+              '<li class="' +
+              (i === 0 ? 'leader' : '') +
+              '"><span>' +
+              (i + 1) +
+              '. ' +
+              esc(sorted[i].name) +
+              '</span><span>' +
+              sorted[i].score +
+              ' очк.</span></li>'
+          }
+          scoreList.innerHTML = html
+        }
+
+        function burst(color) {
+          var colors = [color, '#ffe566', '#00fff0', '#ff1493', '#b8ff00', '#fff']
+          for (var i = 0; i < 36; i++) {
+            var el = document.createElement('i')
+            el.className = 'spark'
+            var angle = Math.random() * Math.PI * 2
+            var dist = 60 + Math.random() * 200
+            el.style.left = '50%'
+            el.style.top = '42%'
+            el.style.background = colors[i % colors.length]
+            el.style.setProperty('--dx', Math.cos(angle) * dist + 'px')
+            el.style.setProperty('--dy', Math.sin(angle) * dist + 'px')
+            fx.appendChild(el)
+            ;(function (node) {
+              setTimeout(function () {
+                if (node.parentNode) node.parentNode.removeChild(node)
+              }, 950)
+            })(el)
+          }
+        }
+
+        function pushHistory(dest, challenge, pointsNote) {
+          history.unshift({
+            who: currentName(),
+            place: dest.label,
+            challenge: challenge,
+            note: pointsNote || '',
+            color: dest.color,
+          })
+          if (history.length > 12) history.length = 12
+          historySection.hidden = false
+          var html = ''
+          for (var i = 0; i < history.length; i++) {
+            var h = history[i]
+            html +=
+              '<li style="border-left-color:' +
+              h.color +
+              '"><span class="who">' +
+              esc(h.who) +
+              '</span> → <strong>' +
+              esc(h.place) +
+              '</strong>' +
+              (h.challenge ? '<br/>задание: ' + esc(h.challenge) : '') +
+              (h.note ? '<br/>' + esc(h.note) : '') +
+              '</li>'
+          }
+          historyList.innerHTML = html
+        }
+
+        function setupBandit(dest) {
+          lastDest = dest
+          lastChallenge = null
+          scoredThisRound = false
+          scoreActions.hidden = true
+          challengeOut.textContent = ''
+
+          var list = CHALLENGES[dest.id]
+          if (!list || !list.length) {
+            banditBox.classList.remove('show')
+            // место без бандита — можно сразу засчитать +1 за явку
+            scoreActions.hidden = false
+            document.getElementById('doneBtn').textContent = '+1 был там'
+            document.getElementById('failBtn').textContent = '+0 мимо'
+            // show score actions under result via bandit box minimal
+            banditBox.classList.add('show')
+            banditBtn.hidden = true
+            challengeOut.textContent = 'Без доп. задания — просто выполняй маршрут.'
+            return
+          }
+
+          banditBtn.hidden = false
+          banditBtn.disabled = false
+          banditBtn.textContent = 'КРУТИТЬ ЗАДАНИЕ'
+          document.getElementById('doneBtn').textContent = '+2 выполнил'
+          document.getElementById('failBtn').textContent = '+0 слил'
+
+          // build reel: repeat list many times
+          var items = []
+          for (var r = 0; r < 8; r++) {
+            for (var i = 0; i < list.length; i++) items.push(list[i])
+          }
+          var html = ''
+          for (var j = 0; j < items.length; j++) {
+            html += '<div class="bandit-item">' + esc(items[j]) + '</div>'
+          }
+          banditReel.innerHTML = html
+          banditReel.style.transition = 'none'
+          banditReel.style.transform = 'translateY(0)'
+          banditBox.classList.add('show')
+          banditReel.dataset.items = JSON.stringify(items)
+          banditReel.dataset.listlen = String(list.length)
+        }
+
+        function showPlace(dest) {
+          resultEl.innerHTML =
+            '<p class="result-kicker">★★ МЕСТО ★★</p>' +
+            '<p class="result-label" style="color:' +
+            dest.color +
+            '">' +
+            esc(dest.label) +
+            '</p>' +
+            '<p class="result-tagline">' +
+            esc(dest.tagline) +
+            '</p>'
+
+          pageEl.classList.remove('flash')
+          void pageEl.offsetWidth
+          pageEl.classList.add('flash')
+          stageEl.classList.remove('win', 'spinning')
+          void stageEl.offsetWidth
+          stageEl.classList.add('win')
+          burst(dest.color)
+          setupBandit(dest)
+        }
+
+        function spinPlace() {
+          if (spinning || banditSpinning) return
+          if (!players.length) {
+            turnLine.textContent = 'Сначала добавь хотя бы одного игрока'
+            playerInput.focus()
+            return
+          }
+
+          spinning = true
+          btn.disabled = true
+          btn.textContent = 'КРУТИТСЯ!!!'
+          stageEl.classList.add('spinning')
+          stageEl.classList.remove('win')
+          banditBox.classList.remove('show')
+          resultEl.innerHTML = '<p class="result-placeholder">Крутится…</p>'
+
+          var index = Math.floor(Math.random() * DESTINATIONS.length)
+          var segmentCenter = index * slice + slice / 2
+          var jitter = (Math.random() - 0.5) * (slice * 0.4)
+          var targetMod = (360 - segmentCenter + jitter + 360) % 360
+          var currentMod = ((rotation % 360) + 360) % 360
+          var extraTurns = MIN_TURNS + Math.floor(Math.random() * 3)
+          var delta = ((targetMod - currentMod + 360) % 360) + extraTurns * 360
+
+          rotation += delta
+          wheelEl.style.transition =
+            'transform ' + SPIN_MS + 'ms cubic-bezier(0.12, 0.8, 0.1, 1)'
+          wheelEl.style.webkitTransform = 'rotate(' + rotation + 'deg)'
+          wheelEl.style.transform = 'rotate(' + rotation + 'deg)'
+
+          setTimeout(function () {
+            var mod = ((rotation % 360) + 360) % 360
+            var local = (360 - mod) % 360
+            var landed = Math.floor(local / slice) % DESTINATIONS.length
+            var snapLocal = landed * slice + slice / 2
+            rotation = rotation - mod + ((360 - snapLocal + 360) % 360)
+            wheelEl.style.transition = 'none'
+            wheelEl.style.webkitTransform = 'rotate(' + rotation + 'deg)'
+            wheelEl.style.transform = 'rotate(' + rotation + 'deg)'
+
+            spinning = false
+            btn.disabled = false
+            btn.textContent = 'КРУТИТЬ МЕСТО!!!'
+            showPlace(DESTINATIONS[landed])
+          }, SPIN_MS)
+        }
+
+        function spinBandit() {
+          if (banditSpinning || !lastDest) return
+          var list = CHALLENGES[lastDest.id]
+          if (!list || !list.length) return
+
+          banditSpinning = true
+          scoredThisRound = false
+          scoreActions.hidden = true
+          banditBtn.disabled = true
+          banditBtn.textContent = 'КРУТИТСЯ…'
+          challengeOut.textContent = ''
+
+          var itemH = 3.4 * 16 // fallback; measure
+          var firstItem = banditReel.querySelector('.bandit-item')
+          if (firstItem) itemH = firstItem.getBoundingClientRect().height
+
+          var pick = Math.floor(Math.random() * list.length)
+          // land in the middle repeats
+          var loops = 4
+          var targetIndex = loops * list.length + pick
+          var y = -targetIndex * itemH
+
+          banditReel.style.transition = 'none'
+          banditReel.style.transform = 'translateY(0)'
+          void banditReel.offsetWidth
+          banditReel.style.transition =
+            'transform ' + BANDIT_MS + 'ms cubic-bezier(0.12, 0.8, 0.05, 1)'
+          banditReel.style.transform = 'translateY(' + y + 'px)'
+
+          setTimeout(function () {
+            lastChallenge = list[pick]
+            challengeOut.textContent = lastChallenge
+            banditSpinning = false
+            banditBtn.disabled = false
+            banditBtn.textContent = 'КРУТИТЬ ЗАДАНИЕ ЕЩЁ'
+            scoreActions.hidden = false
+            burst(lastDest.color)
+          }, BANDIT_MS)
+        }
+
+        function award(points, note) {
+          if (!players.length || !lastDest || scoredThisRound) return
+          scoredThisRound = true
+          players[activePlayer].score += points
+          pushHistory(lastDest, lastChallenge, note + ' (' + (points >= 0 ? '+' : '') + points + ')')
+          // next player
+          activePlayer = (activePlayer + 1) % players.length
+          renderPlayers()
+          scoreActions.hidden = true
+        }
+
+        function addPlayer() {
+          var name = (playerInput.value || '').trim()
+          if (!name) return
+          if (players.length >= 12) return
+          players.push({ name: name, score: 0 })
+          playerInput.value = ''
+          if (players.length === 1) activePlayer = 0
+          renderPlayers()
+        }
+
+        try {
+          renderDecor()
+          renderWheel()
+          renderPlayers()
+          btn.addEventListener('click', spinPlace)
+          banditBtn.addEventListener('click', spinBandit)
+          addPlayerBtn.addEventListener('click', addPlayer)
+          playerInput.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') addPlayer()
+          })
+          document.getElementById('doneBtn').addEventListener('click', function () {
+            var pts = lastChallenge ? 2 : 1
+            award(pts, lastChallenge ? 'выполнил задание' : 'был на месте')
+          })
+          document.getElementById('failBtn').addEventListener('click', function () {
+            award(0, lastChallenge ? 'слил задание' : 'не поехал')
+          })
+        } catch (err) {
+          resultEl.innerHTML =
+            '<p class="result-placeholder">Ошибка загрузки. Открой файл ещё раз.</p>'
+        }
+      })()
+    </script>
   </body>
 </html>
