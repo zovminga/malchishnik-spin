@@ -8,17 +8,21 @@
 
 ```bash
 npm install
-npm run dev
+npm run start
 ```
 
 Открой [http://127.0.0.1:43177](http://127.0.0.1:43177).
 
+`npm run start` собирает проект и поднимает стабильный preview (без HMR).  
+Для разработки: `npm run dev`.
+
 ## Скрипты
 
-| Команда        | Что делает              |
-| -------------- | ----------------------- |
-| `npm run dev`  | Dev-сервер на порту 43177 |
-| `npm run build`| Production-сборка       |
-| `npm run preview` | Превью сборки        |
+| Команда           | Что делает                    |
+| ----------------- | ----------------------------- |
+| `npm run start`   | Сборка + preview на 43177     |
+| `npm run dev`     | Dev-сервер на порту 43177     |
+| `npm run build`   | Production-сборка             |
+| `npm run preview` | Превью уже собранного `dist`  |
 
 Стек: Vite, React, TypeScript, Tailwind CSS v4.
