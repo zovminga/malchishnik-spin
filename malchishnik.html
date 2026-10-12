@@ -153,22 +153,8 @@
         color: var(--pink);
       }
 
-      .neon-frame {
-        width: min(100%, 27rem);
-        padding: 0.85rem 0.7rem 1rem;
-        border: 4px solid var(--gold);
-        border-radius: 18px;
-        background: rgba(0, 0, 0, 0.45);
-        box-shadow:
-          0 0 0 4px #000,
-          0 0 0 8px var(--pink),
-          0 0 30px var(--cyan),
-          inset 0 0 24px rgba(255, 20, 147, 0.25);
-        animation: frame-disco 1.2s steps(2) infinite;
-      }
-
       .hero {
-        width: 100%;
+        width: min(100%, 27rem);
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -608,21 +594,6 @@
         }
       }
 
-      @keyframes frame-disco {
-        0% {
-          box-shadow:
-            0 0 0 4px #000,
-            0 0 0 8px var(--pink),
-            0 0 30px var(--cyan);
-        }
-        50% {
-          box-shadow:
-            0 0 0 4px #000,
-            0 0 0 8px var(--lime),
-            0 0 30px var(--gold);
-        }
-      }
-
       @keyframes badge-wiggle {
         0%,
         100% {
@@ -889,7 +860,6 @@
         .bg,
         .star,
         .ticker-track,
-        .neon-frame,
         .badge,
         .brand,
         h1,
@@ -923,33 +893,31 @@
         <div class="ticker-track" id="tickerB"></div>
       </div>
 
-      <div class="neon-frame">
-        <main class="hero">
-          <div class="badge-row" aria-hidden="true">
-            <span class="badge">HOT</span>
-            <span class="badge">18+</span>
-            <span class="badge">NO REFUND</span>
-            <span class="badge">SPIN NOW</span>
-          </div>
+      <main class="hero">
+        <div class="badge-row" aria-hidden="true">
+          <span class="badge">HOT</span>
+          <span class="badge">18+</span>
+          <span class="badge">NO REFUND</span>
+          <span class="badge">SPIN NOW</span>
+        </div>
 
-          <p class="brand">МАЛЬЧИШНИК</p>
-          <h1>Куда идём дальше?</h1>
-          <p class="lede">Один спин — один адрес. Переигрывать нельзя.</p>
+        <p class="brand">МАЛЬЧИШНИК</p>
+        <h1>Куда идём дальше?</h1>
+        <p class="lede">Один спин — один адрес. Переигрывать нельзя.</p>
 
-          <div class="roulette">
-            <div class="wheel-stage" id="stage">
-              <div class="burst-rays" aria-hidden="true"></div>
-              <div class="pointer" aria-hidden="true"></div>
-              <div class="wheel" id="wheel"></div>
-            </div>
-            <button type="button" class="spin-btn" id="spinBtn">КРУТИТЬ!!!</button>
+        <div class="roulette">
+          <div class="wheel-stage" id="stage">
+            <div class="burst-rays" aria-hidden="true"></div>
+            <div class="pointer" aria-hidden="true"></div>
+            <div class="wheel" id="wheel"></div>
           </div>
+          <button type="button" class="spin-btn" id="spinBtn">КРУТИТЬ!!!</button>
+        </div>
 
-          <div class="result" id="result" aria-live="polite">
-            <p class="result-placeholder">Жми кнопку</p>
-          </div>
-        </main>
-      </div>
+        <div class="result" id="result" aria-live="polite">
+          <p class="result-placeholder">Жми кнопку</p>
+        </div>
+      </main>
 
       <section class="history" id="history" hidden>
         <h2>★ Уже было ★</h2>
