@@ -43,13 +43,6 @@ export const DESTINATIONS: Destination[] = [
     text: '#1a0d00',
   },
   {
-    id: 'tabor',
-    label: 'ТАБОР',
-    tagline: 'Цыганский табор. Песни до утра.',
-    color: '#9b59b6',
-    text: '#fff8ff',
-  },
-  {
     id: 'range',
     label: 'ТИР',
     tagline: 'Стрельбище. Патроны за свой счёт.',
