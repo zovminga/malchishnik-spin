@@ -53,19 +53,26 @@ export function Roulette({ onResult, spinning, setSpinning }: RouletteProps) {
     // Pointer sits at top (0°). Segment centers are at index * slice + slice/2.
     // Wheel rotates clockwise via positive CSS rotate, so we subtract.
     const segmentCenter = index * slice + slice / 2
-    const jitter = (Math.random() - 0.5) * (slice * 0.55)
+    const jitter = (Math.random() - 0.5) * (slice * 0.4)
     const targetMod = (360 - segmentCenter + jitter + 360) % 360
     const currentMod = ((rotation % 360) + 360) % 360
-    const delta =
-      ((targetMod - currentMod + 360) % 360) + MIN_TURNS * 360 + Math.floor(Math.random() * 360)
+    // Extra spin must be whole turns only — leftover degrees shift the winner.
+    const extraTurns = MIN_TURNS + Math.floor(Math.random() * 3)
+    const delta = ((targetMod - currentMod + 360) % 360) + extraTurns * 360
 
     const next = rotation + delta
     setRotation(next)
 
     window.setTimeout(() => {
+      const mod = ((next % 360) + 360) % 360
+      const local = (360 - mod) % 360
+      const landed = Math.floor(local / slice) % DESTINATIONS.length
+      const snapLocal = landed * slice + slice / 2
+      const snapped = next - mod + ((360 - snapLocal + 360) % 360)
+      setRotation(snapped)
       setSpinning(false)
       setGlow(true)
-      onResult(DESTINATIONS[index])
+      onResult(DESTINATIONS[landed])
       lockRef.current = false
     }, SPIN_MS)
   }

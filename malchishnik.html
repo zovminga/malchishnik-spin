@@ -395,17 +395,16 @@
           0 8px 0 #5c0820,
           0 0 24px var(--pink),
           0 0 48px var(--gold);
-        animation: btn-flow 1.2s linear infinite, btn-wobble 0.8s ease-in-out infinite;
+        animation: btn-flow 1.2s linear infinite;
         touch-action: manipulation;
       }
 
       .spin-btn:active:not(:disabled) {
-        transform: translateY(6px) rotate(0deg);
+        transform: translateY(6px);
         box-shadow:
           0 0 0 4px #000,
           0 2px 0 #5c0820,
           0 0 18px var(--pink);
-        animation: btn-flow 1.2s linear infinite;
       }
 
       .spin-btn:disabled {
@@ -702,16 +701,6 @@
       @keyframes btn-flow {
         to {
           background-position: 300% 0;
-        }
-      }
-
-      @keyframes btn-wobble {
-        0%,
-        100% {
-          transform: rotate(-1.5deg);
-        }
-        50% {
-          transform: rotate(1.5deg);
         }
       }
 
@@ -1212,25 +1201,35 @@
 
           var index = Math.floor(Math.random() * DESTINATIONS.length)
           var segmentCenter = index * slice + slice / 2
-          var jitter = (Math.random() - 0.5) * (slice * 0.5)
+          // Keep jitter inside the segment so the pointer can't sit on a neighbor.
+          var jitter = (Math.random() - 0.5) * (slice * 0.4)
           var targetMod = (360 - segmentCenter + jitter + 360) % 360
           var currentMod = ((rotation % 360) + 360) % 360
-          var delta =
-            ((targetMod - currentMod + 360) % 360) +
-            MIN_TURNS * 360 +
-            Math.floor(Math.random() * 420)
+          // Extra spin must be whole turns only — any leftover degrees shift the winner.
+          var extraTurns = MIN_TURNS + Math.floor(Math.random() * 3)
+          var delta = ((targetMod - currentMod + 360) % 360) + extraTurns * 360
 
           rotation += delta
           wheelEl.style.transition =
-            'transform ' + SPIN_MS + 'ms cubic-bezier(0.08, 0.75, 0.05, 1)'
+            'transform ' + SPIN_MS + 'ms cubic-bezier(0.12, 0.8, 0.1, 1)'
           wheelEl.style.webkitTransform = 'rotate(' + rotation + 'deg)'
           wheelEl.style.transform = 'rotate(' + rotation + 'deg)'
 
           setTimeout(function () {
+            // Snap + derive winner from the real angle so UI never disagrees with the arrow.
+            var mod = ((rotation % 360) + 360) % 360
+            var local = (360 - mod) % 360
+            var landed = Math.floor(local / slice) % DESTINATIONS.length
+            var snapLocal = landed * slice + slice / 2
+            rotation = rotation - mod + ((360 - snapLocal + 360) % 360)
+            wheelEl.style.transition = 'none'
+            wheelEl.style.webkitTransform = 'rotate(' + rotation + 'deg)'
+            wheelEl.style.transform = 'rotate(' + rotation + 'deg)'
+
             spinning = false
             btn.disabled = false
             btn.textContent = 'КРУТИТЬ!!!'
-            showResult(DESTINATIONS[index])
+            showResult(DESTINATIONS[landed])
           }, SPIN_MS)
         }
 
