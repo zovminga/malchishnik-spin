@@ -21,10 +21,10 @@ export default function App() {
       <div className="neon-grid" aria-hidden="true" />
 
       <main className="hero">
-        <p className="brand">БАЧОСПИН</p>
+        <p className="brand">НА ЗЕРО</p>
         <h1>Куда идём дальше?</h1>
         <p className="lede">
-          Казино-рулетка мальчишника. Один спин — один маршрут. Спорить поздно.
+          Рулетка мальчишника. Крутишь — едете. Спорить уже поздно.
         </p>
 
         <Roulette
