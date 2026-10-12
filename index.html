@@ -431,6 +431,9 @@
         gap: 0.4rem;
         margin-top: 0.55rem;
       }
+      .score-actions[hidden] {
+        display: none !important;
+      }
       .score-actions button {
         flex: 1;
       }
@@ -712,7 +715,7 @@
       </section>
 
       <footer class="footer">
-        <p>Одна ссылка — одна игра на всех.</p>
+        <p>Одна ссылка — одна игра на всех. <span id="buildTag" style="opacity:0.55">build 4</span></p>
       </footer>
     </div>
 
@@ -925,13 +928,47 @@
         }
 
         function roundOwnerIndex() {
-          if (state.round && state.players[state.round.owner]) return state.round.owner
-          if (roundPlayer != null && state.players[roundPlayer]) return roundPlayer
+          // Локальный владелец спина важнее синка: иначе UI показывает одного,
+          // а очки уходят другому после затирания state.round.
+          if (!scoredThisRound && roundPlayer != null && state.players[roundPlayer]) {
+            return roundPlayer
+          }
+          if (state.round && !state.round.scored && state.players[state.round.owner]) {
+            return state.round.owner
+          }
           return state.activePlayer
         }
 
         function roundIsOpen() {
+          if (!scoredThisRound && roundPlayer != null) return true
           return !!(state.round && !state.round.scored)
+        }
+
+        function ownerName(idx) {
+          if (idx == null || !state.players[idx]) return currentName()
+          return state.players[idx].name
+        }
+
+        function finishRoundUi(nextIdx) {
+          lockRoundAfterScore()
+          els.banditBox.classList.remove('show')
+          els.challengeOut.textContent = ''
+          lastDest = null
+          lastChallenge = null
+          roundPlayer = null
+          scoredThisRound = false
+          state.round = null
+          var name = ownerName(nextIdx)
+          els.result.innerHTML =
+            '<p class="result-kicker">★★ ХОД ПЕРЕХОДИТ ★★</p><p class="result-label" style="color:var(--lime)">' +
+            esc(name) +
+            '</p><p class="result-tagline">Дальше крутит ' +
+            esc(name) +
+            '</p>'
+          if (!spinning) {
+            els.spinBtn.disabled = false
+            els.spinBtn.textContent = 'КРУТИТЬ · ' + name + '!!!'
+          }
         }
 
         function normalizeState(raw) {
@@ -1045,6 +1082,7 @@
 
         function lockRoundAfterScore() {
           els.scoreActions.hidden = true
+          els.scoreActions.setAttribute('hidden', '')
           els.banditBtn.disabled = true
           els.banditBtn.textContent = 'ОЧКИ ЗАСЧИТАНЫ'
         }
@@ -1187,14 +1225,13 @@
 
         function renderPlayers() {
           els.playerList.innerHTML = ''
-          var shown = roundIsOpen() ? roundOwnerIndex() : state.activePlayer
+          var shown = roundOwnerIndex()
           state.players.forEach(function (p, idx) {
             var chip = document.createElement('button')
             chip.type = 'button'
             chip.className = 'player-chip' + (idx === shown ? ' active' : '')
             chip.textContent = p.name + ' ' + p.score
             chip.addEventListener('click', function () {
-              // Пока раунд открыт / крутится — владельца менять нельзя.
               if (spinning || banditSpinning || roundIsOpen()) return
               state.activePlayer = idx
               touch()
@@ -1204,12 +1241,12 @@
           if (!state.players.length) {
             els.turnLine.textContent = 'Добавь игроков'
           } else if (roundIsOpen()) {
-            var ownerName = state.players[roundOwnerIndex()]
-              ? state.players[roundOwnerIndex()].name
-              : currentName()
-            els.turnLine.textContent = 'Раунд: ' + ownerName + ' — очки ему'
+            els.turnLine.textContent = 'Раунд: ' + ownerName(shown) + ' — очки только ему'
           } else {
-            els.turnLine.textContent = 'Сейчас крутит: ' + currentName()
+            els.turnLine.textContent = 'Сейчас крутит: ' + ownerName(shown)
+            if (!spinning && !banditSpinning) {
+              els.spinBtn.textContent = 'КРУТИТЬ · ' + ownerName(shown) + '!!!'
+            }
           }
           if (!state.players.length) {
             els.scoreboard.hidden = true
@@ -1357,7 +1394,7 @@
             els.banditReel.innerHTML = ''
             els.banditBox.classList.add('show')
             els.banditBtn.hidden = true
-            els.scoreActions.hidden = false
+            showScoreActions()
             document.getElementById('doneBtn').textContent = '+1 был там'
             document.getElementById('failBtn').textContent = '+0 мимо'
             els.challengeOut.textContent = 'Без доп. задания — просто маршрут.'
@@ -1370,7 +1407,7 @@
           document.getElementById('failBtn').textContent = '+0 слил'
           if (lastChallenge) {
             els.challengeOut.textContent = lastChallenge
-            els.scoreActions.hidden = false
+            showScoreActions()
           }
           var items = []
           for (var r = 0; r < 8; r++) for (var i = 0; i < list.length; i++) items.push(list[i])
@@ -1505,7 +1542,7 @@
             }
             els.banditBtn.disabled = false
             els.banditBtn.textContent = 'ДРУГОЕ ЗАДАНИЕ'
-            els.scoreActions.hidden = false
+            showScoreActions()
             burst(lastDest.color)
           }, BANDIT_MS)
         }
@@ -1519,24 +1556,28 @@
           }
           var whoIdx = roundOwnerIndex()
           if (whoIdx == null || !state.players[whoIdx]) whoIdx = state.activePlayer
+          var placeLabel = lastDest.label
+          var placeColor = lastDest.color
+          var challenge = lastChallenge
           scoredThisRound = true
           if (state.round) {
             state.round.scored = true
-            state.round.challenge = lastChallenge
+            state.round.challenge = challenge
             state.round.placeId = lastDest.id
-            state.round.placeLabel = lastDest.label
+            state.round.placeLabel = placeLabel
           }
           state.players[whoIdx].score += points
           state.history.unshift({
             who: state.players[whoIdx].name,
-            place: lastDest.label,
-            challenge: lastChallenge,
+            place: placeLabel,
+            challenge: challenge,
             note: note + ' (' + (points >= 0 ? '+' : '') + points + ')',
-            color: lastDest.color,
+            color: placeColor,
           })
           if (state.history.length > 20) state.history.length = 20
-          state.activePlayer = (whoIdx + 1) % state.players.length
-          lockRoundAfterScore()
+          var nextIdx = (whoIdx + 1) % state.players.length
+          state.activePlayer = nextIdx
+          finishRoundUi(nextIdx)
           touch()
         }
 
@@ -1570,10 +1611,23 @@
                 return
               }
               if (next.updatedAt === state.updatedAt && next.updatedBy === state.updatedBy) return
-              if (spinning || banditSpinning) return
+              // Открытый локальный раунд нельзя затирать чужим state без того же token —
+              // иначе UI показывает одного игрока, а очки уходят другому.
+              if (
+                !scoredThisRound &&
+                state.round &&
+                !state.round.scored &&
+                state.round.token &&
+                (!next.round || next.round.token !== state.round.token)
+              ) {
+                schedulePush()
+                return
+              }
+              if ((spinning || banditSpinning) && !(next.round && next.round.scored)) return
               applyingRemote = true
               state = next
               saveLocal()
+              applyRoundUiFromState()
               renderAll()
               applyingRemote = false
               setSyncStatus('live')
