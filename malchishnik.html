@@ -1710,6 +1710,9 @@
               saveLocal()
               applyRoundUiFromState()
               renderAll()
+              if (lastDest && !scoredThisRound && state.round && !state.round.scored) {
+                setupBandit(lastDest)
+              }
               applyingRemote = false
               setSyncStatus('live')
             }
