@@ -1281,6 +1281,7 @@
           els.challengeOut.textContent = ''
           var list = state.challenges[dest.id] || []
           if (!list.length) {
+            els.banditReel.innerHTML = ''
             els.banditBox.classList.add('show')
             els.banditBtn.hidden = true
             els.scoreActions.hidden = false
