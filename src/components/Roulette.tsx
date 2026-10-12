@@ -37,7 +37,7 @@ function describeSlice(
 }
 
 export function Roulette({ onResult, spinning, setSpinning }: RouletteProps) {
-  const filterId = useId()
+  const filterId = useId().replace(/:/g, '')
   const [rotation, setRotation] = useState(0)
   const [glow, setGlow] = useState(false)
   const lockRef = useRef(false)
