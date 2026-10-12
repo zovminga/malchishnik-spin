@@ -20,6 +20,15 @@ python3 -m http.server 8765
 
 Открой http://127.0.0.1:8765/malchishnik.html
 
+## Проверка: новый браузер не затирает очки
+
+```bash
+npm install
+npm run test:wipe
+```
+
+Ждёт `LOOP GREEN`. Для старого билда без гардов: подними его на `:8766` и `npm run test:wipe:red`.
+
 ## React-версия (Vite)
 
 ```bash
