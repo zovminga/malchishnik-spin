@@ -565,6 +565,30 @@
         color: rgba(215, 224, 215, 0.85);
         text-align: center;
       }
+      .footer-tools {
+        margin-top: 0.55rem;
+        display: flex;
+        justify-content: center;
+        gap: 0.75rem;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .footer-tools button {
+        border: 0;
+        background: transparent;
+        color: rgba(215, 224, 215, 0.45);
+        font: inherit;
+        font-size: 0.68rem;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        text-decoration: underline;
+        text-underline-offset: 2px;
+        cursor: pointer;
+        padding: 0.1rem 0.15rem;
+      }
+      .footer-tools button:hover {
+        color: rgba(215, 224, 215, 0.75);
+      }
       .fx {
         position: fixed;
         inset: 0;
@@ -645,9 +669,6 @@
         <div class="top-actions">
           <button type="button" class="share" id="shareFriendsBtn">Скопировать ссылку</button>
           <button type="button" class="reset-game" id="resetGameBtn">Обнулить игру</button>
-          <button type="button" class="reset-game" id="hardResetBtn" style="border-color: var(--gold); flex-basis: 100%">
-            Сбросить кэш / разблокировать
-          </button>
         </div>
 
         <section class="panel" aria-label="Игроки">
@@ -718,7 +739,11 @@
       </section>
 
       <footer class="footer">
-        <p>Одна ссылка — одна игра на всех. <span id="buildTag" style="opacity:0.55">build 6</span></p>
+        <p>Одна ссылка — одна игра на всех.</p>
+        <div class="footer-tools">
+          <span id="buildTag">build 7</span>
+          <button type="button" id="hardResetBtn">сброс кэша</button>
+        </div>
       </footer>
     </div>
 
@@ -1103,9 +1128,9 @@
         function hardResetCache() {
           if (
             !confirm(
-              'Полный сброс кэша этого телефона?\n' +
-                'Очки/лог/раунд обнулятся у всех после синка.\n' +
-                'Страница перезагрузится.',
+              'Сбросить зависшее на этом телефоне и перезагрузить страницу?\n\n' +
+                'Нужно, если кнопки залипли.\n' +
+                'Очки и лог тоже обнулятся у всех.',
             )
           ) {
             return
