@@ -23,9 +23,7 @@ export default function App() {
       <main className="hero">
         <p className="brand">МАЛЬЧИШНИК</p>
         <h1>Куда идём дальше?</h1>
-        <p className="lede">
-          Крути рулетку — она решит маршрут. Спорить поздно.
-        </p>
+        <p className="lede">Один спин — один адрес. Переигрывать нельзя.</p>
 
         <Roulette
           onResult={handleResult}
@@ -47,7 +45,7 @@ export default function App() {
             </>
           ) : (
             <p className="result-placeholder">
-              {spinning ? 'Шарик ищет приключение…' : 'Жми кнопку — судьба решит.'}
+              {spinning ? 'Крутится…' : 'Жми кнопку'}
             </p>
           )}
         </div>
