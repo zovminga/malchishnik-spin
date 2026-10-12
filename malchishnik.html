@@ -715,7 +715,7 @@
       </section>
 
       <footer class="footer">
-        <p>Одна ссылка — одна игра на всех. <span id="buildTag" style="opacity:0.55">build 4</span></p>
+        <p>Одна ссылка — одна игра на всех. <span id="buildTag" style="opacity:0.55">build 5</span></p>
       </footer>
     </div>
 
@@ -827,7 +827,16 @@
 
         var LOCAL_KEY = 'malchishnik-state-v3'
         var SYNC_KEY = 'malchishnik-sync-v1'
-        var DEFAULT_ROOM = 'malchishnik'
+        var DEFAULT_ROOM =
+          (function () {
+            try {
+              var q = new URLSearchParams(location.search || '')
+              var r = (q.get('room') || '').replace(/[^\w\-]/g, '').slice(0, 40)
+              return r || 'malchishnik'
+            } catch (e) {
+              return 'malchishnik'
+            }
+          })()
         // Публичный веб-конфиг Firebase (для клиента это нормально).
         // Один раз настроили — сайт сам подключается к общей комнате.
         var DEFAULT_FIREBASE = {
@@ -1085,6 +1094,11 @@
           els.scoreActions.setAttribute('hidden', '')
           els.banditBtn.disabled = true
           els.banditBtn.textContent = 'ОЧКИ ЗАСЧИТАНЫ'
+        }
+
+        function showScoreActions() {
+          els.scoreActions.hidden = false
+          els.scoreActions.removeAttribute('hidden')
         }
 
         function schedulePush() {
