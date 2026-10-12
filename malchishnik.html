@@ -822,7 +822,7 @@
           guinness: ['Пить только сидя на стене'],
         }
 
-        var LOCAL_KEY = 'malchishnik-state-v2'
+        var LOCAL_KEY = 'malchishnik-state-v3'
         var SYNC_KEY = 'malchishnik-sync-v1'
         var DEFAULT_ROOM = 'malchishnik'
         // Публичный веб-конфиг Firebase (для клиента это нормально).
@@ -904,10 +904,34 @@
             challenges: JSON.parse(JSON.stringify(DEFAULT_CHALLENGES)),
             players: [],
             activePlayer: 0,
+            // Общий раунд на всех устройствах: кто крутил и зачтены ли очки.
+            round: null,
             history: [],
             updatedAt: Date.now(),
             updatedBy: clientId,
           }
+        }
+
+        function emptyRound(owner) {
+          return {
+            owner: Math.max(0, Number(owner) || 0),
+            placeId: null,
+            placeLabel: null,
+            placeColor: null,
+            challenge: null,
+            scored: false,
+            token: uid('r'),
+          }
+        }
+
+        function roundOwnerIndex() {
+          if (state.round && state.players[state.round.owner]) return state.round.owner
+          if (roundPlayer != null && state.players[roundPlayer]) return roundPlayer
+          return state.activePlayer
+        }
+
+        function roundIsOpen() {
+          return !!(state.round && !state.round.scored)
         }
 
         function normalizeState(raw) {
@@ -940,6 +964,21 @@
             : []
           base.activePlayer = Math.max(0, Math.min(base.players.length - 1, Number(raw.activePlayer) || 0))
           if (!base.players.length) base.activePlayer = 0
+          if (raw.round && typeof raw.round === 'object') {
+            var owner = Math.max(0, Math.min(base.players.length - 1, Number(raw.round.owner) || 0))
+            base.round = {
+              owner: owner,
+              placeId: raw.round.placeId ? String(raw.round.placeId) : null,
+              placeLabel: raw.round.placeLabel ? String(raw.round.placeLabel) : null,
+              placeColor: raw.round.placeColor ? String(raw.round.placeColor) : null,
+              challenge: raw.round.challenge != null ? String(raw.round.challenge) : null,
+              scored: !!raw.round.scored,
+              token: raw.round.token ? String(raw.round.token) : uid('r'),
+            }
+            if (!base.players.length) base.round = null
+          } else {
+            base.round = null
+          }
           base.history = Array.isArray(raw.history) ? raw.history.slice(0, 20) : []
           base.updatedAt = Number(raw.updatedAt) || Date.now()
           base.updatedBy = raw.updatedBy || ''
@@ -981,6 +1020,7 @@
           })
           state.history = []
           state.activePlayer = 0
+          state.round = null
           lastDest = null
           lastChallenge = null
           scoredThisRound = false
@@ -1147,22 +1187,30 @@
 
         function renderPlayers() {
           els.playerList.innerHTML = ''
+          var shown = roundIsOpen() ? roundOwnerIndex() : state.activePlayer
           state.players.forEach(function (p, idx) {
             var chip = document.createElement('button')
             chip.type = 'button'
-            chip.className = 'player-chip' + (idx === state.activePlayer ? ' active' : '')
+            chip.className = 'player-chip' + (idx === shown ? ' active' : '')
             chip.textContent = p.name + ' ' + p.score
             chip.addEventListener('click', function () {
-              // Во время незакрытого раунда чип не меняет, кому пойдут очки.
-              if (lastDest && !scoredThisRound) return
+              // Пока раунд открыт / крутится — владельца менять нельзя.
+              if (spinning || banditSpinning || roundIsOpen()) return
               state.activePlayer = idx
               touch()
             })
             els.playerList.appendChild(chip)
           })
-          els.turnLine.textContent = state.players.length
-            ? 'Сейчас крутит: ' + currentName()
-            : 'Добавь игроков'
+          if (!state.players.length) {
+            els.turnLine.textContent = 'Добавь игроков'
+          } else if (roundIsOpen()) {
+            var ownerName = state.players[roundOwnerIndex()]
+              ? state.players[roundOwnerIndex()].name
+              : currentName()
+            els.turnLine.textContent = 'Раунд: ' + ownerName + ' — очки ему'
+          } else {
+            els.turnLine.textContent = 'Сейчас крутит: ' + currentName()
+          }
           if (!state.players.length) {
             els.scoreboard.hidden = true
             return
@@ -1273,12 +1321,37 @@
           }
         }
 
+        function applyRoundUiFromState() {
+          if (!state.round) {
+            roundPlayer = null
+            return
+          }
+          roundPlayer = state.round.owner
+          scoredThisRound = !!state.round.scored
+          if (state.round.placeId) {
+            for (var i = 0; i < state.destinations.length; i++) {
+              if (state.destinations[i].id === state.round.placeId) {
+                lastDest = state.destinations[i]
+                break
+              }
+            }
+          }
+          if (state.round.challenge != null) lastChallenge = state.round.challenge
+          if (state.round.scored) lockRoundAfterScore()
+        }
+
         function setupBandit(dest) {
           lastDest = dest
-          lastChallenge = null
-          scoredThisRound = false
+          lastChallenge = state.round && state.round.challenge != null ? state.round.challenge : null
+          scoredThisRound = !!(state.round && state.round.scored)
           els.scoreActions.hidden = true
-          els.challengeOut.textContent = ''
+          els.challengeOut.textContent = lastChallenge || ''
+          if (scoredThisRound) {
+            els.banditBox.classList.add('show')
+            lockRoundAfterScore()
+            if (lastChallenge) els.challengeOut.textContent = lastChallenge
+            return
+          }
           var list = state.challenges[dest.id] || []
           if (!list.length) {
             els.banditReel.innerHTML = ''
@@ -1292,9 +1365,13 @@
           }
           els.banditBtn.hidden = false
           els.banditBtn.disabled = false
-          els.banditBtn.textContent = 'КРУТИТЬ ЗАДАНИЕ'
+          els.banditBtn.textContent = lastChallenge ? 'ДРУГОЕ ЗАДАНИЕ' : 'КРУТИТЬ ЗАДАНИЕ'
           document.getElementById('doneBtn').textContent = '+2 выполнил'
           document.getElementById('failBtn').textContent = '+0 слил'
+          if (lastChallenge) {
+            els.challengeOut.textContent = lastChallenge
+            els.scoreActions.hidden = false
+          }
           var items = []
           for (var r = 0; r < 8; r++) for (var i = 0; i < list.length; i++) items.push(list[i])
           els.banditReel.innerHTML = items
@@ -1320,7 +1397,15 @@
           void els.page.offsetWidth
           els.page.classList.add('flash')
           burst(dest.color)
+          if (state.round) {
+            state.round.placeId = dest.id
+            state.round.placeLabel = dest.label
+            state.round.placeColor = dest.color
+            state.round.challenge = null
+            state.round.scored = false
+          }
           setupBandit(dest)
+          touch()
         }
 
         function spinPlace() {
@@ -1334,9 +1419,14 @@
             alert('Нет мест на колесе — добавь в редакторе')
             return
           }
+          if (roundIsOpen()) {
+            alert('Сначала зачти очки за текущий раунд')
+            return
+          }
           spinning = true
-          // Фиксируем, кому очки за этот спин — до конца раунда.
-          roundPlayer = state.activePlayer
+          // Владелец раунда пишется в общий state — на всех телефонах один и тот же.
+          state.round = emptyRound(state.activePlayer)
+          roundPlayer = state.round.owner
           lastDest = null
           lastChallenge = null
           scoredThisRound = false
@@ -1344,6 +1434,8 @@
           els.spinBtn.textContent = 'КРУТИТСЯ!!!'
           els.banditBox.classList.remove('show')
           els.result.innerHTML = '<p class="result-placeholder">Крутится…</p>'
+          renderPlayers()
+          touch()
 
           var sl = slice()
           var index = Math.floor(Math.random() * state.destinations.length)
@@ -1369,16 +1461,22 @@
             spinning = false
             els.spinBtn.disabled = false
             els.spinBtn.textContent = 'КРУТИТЬ МЕСТО!!!'
+            // Если раунд уже закрыли с другого телефона — не перетираем.
+            if (state.round && state.round.scored) {
+              applyRoundUiFromState()
+              renderPlayers()
+              return
+            }
             showPlace(state.destinations[landed])
           }, SPIN_MS)
         }
 
         function spinBandit() {
           if (banditSpinning || !lastDest || scoredThisRound) return
+          if (state.round && state.round.scored) return
           var list = state.challenges[lastDest.id] || []
           if (!list.length) return
           banditSpinning = true
-          // Перекрут задания до зачёта очков — ок. После зачёта — нельзя.
           els.scoreActions.hidden = true
           els.banditBtn.disabled = true
           els.challengeOut.textContent = ''
@@ -1397,9 +1495,13 @@
             lastChallenge = list[pick]
             els.challengeOut.textContent = lastChallenge
             banditSpinning = false
-            if (scoredThisRound) {
+            if (scoredThisRound || (state.round && state.round.scored)) {
               lockRoundAfterScore()
               return
+            }
+            if (state.round) {
+              state.round.challenge = lastChallenge
+              touch()
             }
             els.banditBtn.disabled = false
             els.banditBtn.textContent = 'ДРУГОЕ ЗАДАНИЕ'
@@ -1409,16 +1511,21 @@
         }
 
         function award(points, note) {
-          if (!state.players.length || !lastDest || scoredThisRound) return
-          // Если у места есть бандит — нельзя закрыть раунд без задания
-          // (раньше из‑за этого давало +1 «был там» вместо +2).
+          if (!state.players.length || !lastDest) return
+          if (scoredThisRound || (state.round && state.round.scored)) return
           if (placeHasChallenges(lastDest) && !lastChallenge) {
             alert('Сначала крутани задание')
             return
           }
-          var whoIdx = roundPlayer
+          var whoIdx = roundOwnerIndex()
           if (whoIdx == null || !state.players[whoIdx]) whoIdx = state.activePlayer
           scoredThisRound = true
+          if (state.round) {
+            state.round.scored = true
+            state.round.challenge = lastChallenge
+            state.round.placeId = lastDest.id
+            state.round.placeLabel = lastDest.label
+          }
           state.players[whoIdx].score += points
           state.history.unshift({
             who: state.players[whoIdx].name,
