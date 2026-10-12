@@ -21,10 +21,10 @@ export default function App() {
       <div className="neon-grid" aria-hidden="true" />
 
       <main className="hero">
-        <p className="brand">НА ЗЕРО</p>
+        <p className="brand">МАЛЬЧИШНИК</p>
         <h1>Куда идём дальше?</h1>
         <p className="lede">
-          Рулетка мальчишника. Крутишь — едете. Спорить уже поздно.
+          Крути рулетку — она решит маршрут. Спорить поздно.
         </p>
 
         <Roulette
