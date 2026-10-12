@@ -996,8 +996,8 @@
           if (!dbRef) return
           clearTimeout(pushTimer)
           pushTimer = setTimeout(function () {
-            dbRef.set(state).catch(function (err) {
-              setSyncStatus('error', '● Ошибка записи: ' + (err && err.message ? err.message : 'fail'))
+            dbRef.set(state).catch(function () {
+              setSyncStatus('error', '● Не удалось сохранить общий список')
             })
           }, 280)
         }
