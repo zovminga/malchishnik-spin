@@ -630,6 +630,145 @@
         flex: 1;
       }
 
+      .editor-toggle {
+        width: 100%;
+        margin-top: 0.75rem;
+        appearance: none;
+        border: 2px dashed var(--cyan);
+        background: rgba(0, 0, 0, 0.45);
+        color: var(--cyan);
+        font-weight: 900;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        padding: 0.7rem;
+        cursor: pointer;
+        touch-action: manipulation;
+      }
+
+      .editor {
+        width: 100%;
+        margin-top: 0.5rem;
+        padding: 0.75rem;
+        background: rgba(0, 0, 0, 0.55);
+        border: 3px solid var(--cyan);
+        text-align: left;
+        display: none;
+      }
+
+      .editor.show {
+        display: block;
+      }
+
+      .editor h2 {
+        margin: 0 0 0.35rem;
+        font-size: 0.85rem;
+        letter-spacing: 0.14em;
+        color: var(--cyan);
+        font-weight: 900;
+        text-transform: uppercase;
+      }
+
+      .editor-help {
+        margin: 0 0 0.65rem;
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: var(--muted);
+        line-height: 1.35;
+      }
+
+      .editor-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+        margin-bottom: 0.75rem;
+      }
+
+      .editor-actions button,
+      .place-block .add-row button,
+      .chal-row button {
+        appearance: none;
+        border: 2px solid #fff;
+        background: #333;
+        color: #fff;
+        font-weight: 800;
+        font-size: 0.8rem;
+        padding: 0.45rem 0.55rem;
+        cursor: pointer;
+        touch-action: manipulation;
+      }
+
+      .editor-actions button.primary {
+        background: var(--cyan);
+        color: #001;
+      }
+
+      .editor-actions button.danger {
+        background: var(--red);
+      }
+
+      .place-block {
+        margin-bottom: 0.65rem;
+        padding: 0.55rem;
+        border: 2px solid #444;
+        background: rgba(0, 0, 0, 0.35);
+      }
+
+      .place-block h3 {
+        margin: 0 0 0.4rem;
+        font-size: 0.95rem;
+        font-weight: 900;
+        letter-spacing: 0.06em;
+      }
+
+      .chal-row {
+        display: flex;
+        gap: 0.35rem;
+        align-items: center;
+        margin-bottom: 0.3rem;
+      }
+
+      .chal-row span {
+        flex: 1;
+        min-width: 0;
+        font-size: 0.9rem;
+        font-weight: 700;
+        line-height: 1.25;
+      }
+
+      .chal-row button {
+        background: #662222;
+        flex-shrink: 0;
+      }
+
+      .place-block .add-row {
+        display: flex;
+        gap: 0.35rem;
+        margin-top: 0.4rem;
+      }
+
+      .place-block .add-row input {
+        flex: 1;
+        min-width: 0;
+        border: 2px solid #666;
+        background: #000;
+        color: #fff;
+        padding: 0.45rem 0.5rem;
+        font-size: 0.9rem;
+        font-weight: 600;
+      }
+
+      .place-block .add-row button {
+        background: var(--lime);
+        color: #04150a;
+      }
+
+      .empty-chal {
+        margin: 0 0 0.35rem;
+        font-size: 0.8rem;
+        color: #888;
+        font-weight: 600;
+      }
+
       .scoreboard {
         width: min(100%, 27rem);
         margin-top: 1rem;
@@ -975,6 +1114,25 @@
             <button type="button" class="score-btn fail" id="failBtn">+0 слил</button>
           </div>
         </section>
+
+        <button type="button" class="editor-toggle" id="editorToggle">
+          ★ Список заданий — открыть / править ★
+        </button>
+        <section class="editor" id="editor" aria-label="Редактор заданий">
+          <h2>★ Задания по местам ★</h2>
+          <p class="editor-help">
+            Правь прямо тут. Сохраняется в этом браузере. Чтобы скинуть друзьям —
+            «Экспорт JSON» (файл в Telegram) или «Ссылка с настройками».
+          </p>
+          <div class="editor-actions">
+            <button type="button" class="primary" id="exportBtn">Экспорт JSON</button>
+            <button type="button" id="importBtn">Импорт JSON</button>
+            <button type="button" id="shareBtn">Ссылка с настройками</button>
+            <button type="button" class="danger" id="resetBtn">Сброс</button>
+            <input id="importFile" type="file" accept="application/json,.json" hidden />
+          </div>
+          <div id="editorList"></div>
+        </section>
       </main>
 
       <section class="scoreboard" id="scoreboard" hidden>
@@ -1060,8 +1218,7 @@
           },
         ]
 
-        // Второй спин — не для всех мест.
-        var CHALLENGES = {
+        var DEFAULT_CHALLENGES = {
           bar: [
             'Угостить всех пивом',
             'Коктейль от бармена «на усмотрение»',
@@ -1074,19 +1231,18 @@
             'Сыграть рулетку с минималкой x5',
             'Все фишки в одну игру',
           ],
-          strip: [
-            'Заказать танец жениху',
-            'Громко покричать стриптизерше',
-          ],
+          strip: ['Заказать танец жениху', 'Громко покричать стриптизерше'],
           comps: [
             'Победить в 1v1',
             'Сыграть катку громко ругаясь на команду',
             'Открыть 5 кейсов',
           ],
-          // ТИР, 33, KC Grad — без бандита пока
           pokemon: ['Открывать бустеры до эпического покемона'],
           guinness: ['Пить только сидя на стене'],
         }
+
+        var STORAGE_KEY = 'malchishnik-challenges-v1'
+        var challenges = loadChallenges()
 
         var SPIN_MS = 5600
         var BANDIT_MS = 2800
@@ -1122,6 +1278,44 @@
         var turnLine = document.getElementById('turnLine')
         var scoreboard = document.getElementById('scoreboard')
         var scoreList = document.getElementById('scoreList')
+        var editor = document.getElementById('editor')
+        var editorList = document.getElementById('editorList')
+        var editorToggle = document.getElementById('editorToggle')
+
+        function cloneChallenges(src) {
+          var out = {}
+          var ids = DESTINATIONS.map(function (d) {
+            return d.id
+          })
+          for (var i = 0; i < ids.length; i++) {
+            var id = ids[i]
+            out[id] = src && src[id] ? src[id].slice() : []
+          }
+          return out
+        }
+
+        function loadChallenges() {
+          try {
+            var raw = localStorage.getItem(STORAGE_KEY)
+            if (raw) {
+              var parsed = JSON.parse(raw)
+              if (parsed && typeof parsed === 'object') return cloneChallenges(parsed)
+            }
+          } catch (e) {}
+          return cloneChallenges(DEFAULT_CHALLENGES)
+        }
+
+        function saveChallenges() {
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(challenges))
+          } catch (e) {}
+        }
+
+        function applyChallenges(next) {
+          challenges = cloneChallenges(next)
+          saveChallenges()
+          renderEditor()
+        }
 
         function polar(cx, cy, r, angleDeg) {
           var rad = ((angleDeg - 90) * Math.PI) / 180
@@ -1398,14 +1592,12 @@
           scoreActions.hidden = true
           challengeOut.textContent = ''
 
-          var list = CHALLENGES[dest.id]
+          var list = challenges[dest.id]
           if (!list || !list.length) {
             banditBox.classList.remove('show')
-            // место без бандита — можно сразу засчитать +1 за явку
             scoreActions.hidden = false
             document.getElementById('doneBtn').textContent = '+1 был там'
             document.getElementById('failBtn').textContent = '+0 мимо'
-            // show score actions under result via bandit box minimal
             banditBox.classList.add('show')
             banditBtn.hidden = true
             challengeOut.textContent = 'Без доп. задания — просто выполняй маршрут.'
@@ -1504,9 +1696,46 @@
           }, SPIN_MS)
         }
 
+        function renderEditor() {
+          var html = ''
+          for (var i = 0; i < DESTINATIONS.length; i++) {
+            var d = DESTINATIONS[i]
+            var list = challenges[d.id] || []
+            html +=
+              '<div class="place-block" data-id="' +
+              esc(d.id) +
+              '">' +
+              '<h3 style="color:' +
+              d.color +
+              '">' +
+              esc(d.label) +
+              '</h3>'
+            if (!list.length) {
+              html += '<p class="empty-chal">Пока пусто — бандита не будет</p>'
+            }
+            for (var j = 0; j < list.length; j++) {
+              html +=
+                '<div class="chal-row">' +
+                '<span>' +
+                esc(list[j]) +
+                '</span>' +
+                '<button type="button" data-del="' +
+                j +
+                '">✕</button>' +
+                '</div>'
+            }
+            html +=
+              '<div class="add-row">' +
+              '<input type="text" maxlength="80" placeholder="Новое задание…" data-add-input />' +
+              '<button type="button" data-add>Добавить</button>' +
+              '</div></div>'
+          }
+          editorList.innerHTML = html
+        }
+
         function spinBandit() {
           if (banditSpinning || !lastDest) return
-          var list = CHALLENGES[lastDest.id]
+          var list = challenges[lastDest.id]
           if (!list || !list.length) return
 
           banditSpinning = true
@@ -1565,10 +1794,75 @@
           renderPlayers()
         }
 
+        function exportChallenges() {
+          var blob = new Blob([JSON.stringify(challenges, null, 2)], {
+            type: 'application/json',
+          })
+          var a = document.createElement('a')
+          a.href = URL.createObjectURL(blob)
+          a.download = 'malchishnik-challenges.json'
+          a.click()
+          URL.revokeObjectURL(a.href)
+        }
+
+        function importChallengesFile(file) {
+          if (!file) return
+          var reader = new FileReader()
+          reader.onload = function () {
+            try {
+              var parsed = JSON.parse(String(reader.result || ''))
+              applyChallenges(parsed)
+              alert('Задания загружены')
+            } catch (e) {
+              alert('Не получилось прочитать JSON')
+            }
+          }
+          reader.readAsText(file)
+        }
+
+        function shareLink() {
+          try {
+            var json = JSON.stringify(challenges)
+            var encoded = btoa(unescape(encodeURIComponent(json)))
+            var url = location.origin + location.pathname + '#cfg=' + encoded
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              navigator.clipboard.writeText(url).then(
+                function () {
+                  alert('Ссылка скопирована. Друг откроет — задания подтянутся.')
+                },
+                function () {
+                  prompt('Скопируй ссылку:', url)
+                },
+              )
+            } else {
+              prompt('Скопируй ссылку:', url)
+            }
+          } catch (e) {
+            alert('Ссылка слишком длинная — лучше Экспорт JSON')
+          }
+        }
+
+        function tryLoadFromHash() {
+          var hash = location.hash || ''
+          if (hash.indexOf('#cfg=') !== 0) return
+          try {
+            var encoded = hash.slice(5)
+            var json = decodeURIComponent(escape(atob(encoded)))
+            var parsed = JSON.parse(json)
+            applyChallenges(parsed)
+            history.replaceState(null, '', location.pathname + location.search)
+            editor.classList.add('show')
+            editorToggle.textContent = '★ Список заданий — свернуть ★'
+          } catch (e) {}
+        }
+
         try {
           renderDecor()
           renderWheel()
           renderPlayers()
+          renderEditor()
+          tryLoadFromHash()
+
           btn.addEventListener('click', spinPlace)
           banditBtn.addEventListener('click', spinBandit)
           addPlayerBtn.addEventListener('click', addPlayer)
@@ -1581,6 +1875,64 @@
           })
           document.getElementById('failBtn').addEventListener('click', function () {
             award(0, lastChallenge ? 'слил задание' : 'не поехал')
+          })
+
+          editorToggle.addEventListener('click', function () {
+            editor.classList.toggle('show')
+            editorToggle.textContent = editor.classList.contains('show')
+              ? '★ Список заданий — свернуть ★'
+              : '★ Список заданий — открыть / править ★'
+          })
+
+          editorList.addEventListener('click', function (e) {
+            var t = e.target
+            if (!t || !t.getAttribute) return
+            var block = t.closest('.place-block')
+            if (!block) return
+            var id = block.getAttribute('data-id')
+            if (!challenges[id]) challenges[id] = []
+
+            if (t.getAttribute('data-del') != null) {
+              var idx = parseInt(t.getAttribute('data-del'), 10)
+              challenges[id].splice(idx, 1)
+              saveChallenges()
+              renderEditor()
+              return
+            }
+
+            if (t.getAttribute('data-add') != null) {
+              var input = block.querySelector('[data-add-input]')
+              var text = (input && input.value ? input.value : '').trim()
+              if (!text) return
+              challenges[id].push(text)
+              saveChallenges()
+              renderEditor()
+            }
+          })
+
+          editorList.addEventListener('keydown', function (e) {
+            if (e.key !== 'Enter') return
+            var t = e.target
+            if (!t || !t.getAttribute || t.getAttribute('data-add-input') == null) return
+            var block = t.closest('.place-block')
+            if (!block) return
+            var btnAdd = block.querySelector('[data-add]')
+            if (btnAdd) btnAdd.click()
+          })
+
+          document.getElementById('exportBtn').addEventListener('click', exportChallenges)
+          document.getElementById('importBtn').addEventListener('click', function () {
+            document.getElementById('importFile').click()
+          })
+          document.getElementById('importFile').addEventListener('change', function (e) {
+            var f = e.target.files && e.target.files[0]
+            importChallengesFile(f)
+            e.target.value = ''
+          })
+          document.getElementById('shareBtn').addEventListener('click', shareLink)
+          document.getElementById('resetBtn').addEventListener('click', function () {
+            if (!confirm('Сбросить задания к стандартным?')) return
+            applyChallenges(DEFAULT_CHALLENGES)
           })
         } catch (err) {
           resultEl.innerHTML =
