@@ -2,6 +2,8 @@
 <html lang="ru">
   <head>
     <meta charset="UTF-8" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
     <meta
       name="viewport"
       content="width=device-width, initial-scale=1, viewport-fit=cover"
@@ -741,7 +743,7 @@
       <footer class="footer">
         <p>Одна ссылка — одна игра на всех.</p>
         <div class="footer-tools">
-          <span id="buildTag">build 10</span>
+          <span id="buildTag">build 11</span>
           <button type="button" id="hardResetBtn">сброс кэша</button>
         </div>
       </footer>
@@ -1198,16 +1200,39 @@
 
         function schedulePush() {
           if (applyingRemote) return
+          // До первого снимка комнаты не трогаем updatedAt — иначе пустой
+          // локальный state становится «новее» серверного и потом затирает очки.
+          if (dbRef && !syncReady) {
+            saveLocal()
+            return
+          }
           state.updatedAt = Date.now()
           state.updatedBy = clientId
           saveLocal()
           if (!dbRef) return
-          if (!syncReady) return
           clearTimeout(pushTimer)
           pushTimer = setTimeout(function () {
-            dbRef.set(state).catch(function () {
-              setSyncStatus('error', '● Не удалось сохранить общий список')
-            })
+            var toWrite = JSON.parse(JSON.stringify(state))
+            dbRef
+              .transaction(function (current) {
+                if (current === null) return toWrite
+                var cur = normalizeState(current)
+                var remoteR = stateRichness(cur)
+                var localR = stateRichness(toWrite)
+                // Никогда не затираем более богатую комнату более пустой.
+                if (remoteR > localR) return
+                if (
+                  cur.updatedAt > toWrite.updatedAt &&
+                  cur.updatedBy !== clientId &&
+                  remoteR >= localR
+                ) {
+                  return
+                }
+                return toWrite
+              })
+              .catch(function () {
+                setSyncStatus('error', '● Не удалось сохранить общий список')
+              })
           }, 280)
         }
 
@@ -1720,7 +1745,8 @@
               var remote = snap.val()
 
               // Первый заход: всегда берём комнату с сервера, если она есть.
-              // Новый браузер не должен затирать чужие очки пустым локальным state.
+              // Если снимок null — НЕ сидим пустым state (часто это гонка).
+              // Ждём следующий value или первое действие пользователя.
               if (!sawRemoteOnce) {
                 sawRemoteOnce = true
                 if (remote) {
@@ -1735,13 +1761,13 @@
                   return
                 }
                 syncReady = true
-                schedulePush()
                 setSyncStatus('live')
                 return
               }
 
               if (!remote) {
-                schedulePush()
+                // Пустая комната на сервере — сидим только если локально уже есть игроки/история.
+                if (stateRichness(state) > 0) schedulePush()
                 setSyncStatus('live')
                 return
               }
