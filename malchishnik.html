@@ -237,14 +237,12 @@
         font-weight: 900;
         letter-spacing: 0.04em;
         text-transform: uppercase;
-        background: linear-gradient(90deg, var(--pink), var(--gold), var(--cyan), var(--lime), var(--pink));
-        background-size: 200% 100%;
-        -webkit-background-clip: text;
-        background-clip: text;
-        color: transparent;
-        -webkit-text-fill-color: transparent;
-        animation: rainbow-text 1.5s linear infinite;
-        filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.4));
+        color: var(--gold);
+        text-shadow:
+          0 0 10px var(--pink),
+          2px 0 var(--cyan),
+          -2px 0 var(--lime);
+        animation: brand-hue 1.4s steps(4) infinite;
       }
 
       .lede {
