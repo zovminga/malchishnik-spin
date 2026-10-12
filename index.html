@@ -897,6 +897,8 @@
         var dbRef = null
         var dbUnsub = null
         var firebaseApp = null
+        var syncReady = false
+        var sawRemoteOnce = false
 
         var els = {
           syncBar: document.getElementById('syncBar'),
@@ -1186,12 +1188,21 @@
           els.scoreActions.removeAttribute('hidden')
         }
 
+        function stateRichness(s) {
+          if (!s) return 0
+          var scoreSum = 0
+          var players = s.players || []
+          for (var i = 0; i < players.length; i++) scoreSum += Number(players[i].score) || 0
+          return (s.history || []).length * 100 + players.length * 10 + scoreSum
+        }
+
         function schedulePush() {
           if (applyingRemote) return
           state.updatedAt = Date.now()
           state.updatedBy = clientId
           saveLocal()
           if (!dbRef) return
+          if (!syncReady) return
           clearTimeout(pushTimer)
           pushTimer = setTimeout(function () {
             dbRef.set(state).catch(function () {
@@ -1701,10 +1712,34 @@
             firebaseApp = firebase.initializeApp(config)
             var roomId = (room || 'malchishnik').replace(/[^\w\-]/g, '').slice(0, 40) || 'malchishnik'
             dbRef = firebase.database().ref('rooms/' + roomId + '/state')
+            syncReady = false
+            sawRemoteOnce = false
             setSyncStatus('live')
 
             dbUnsub = function (snap) {
               var remote = snap.val()
+
+              // Первый заход: всегда берём комнату с сервера, если она есть.
+              // Новый браузер не должен затирать чужие очки пустым локальным state.
+              if (!sawRemoteOnce) {
+                sawRemoteOnce = true
+                if (remote) {
+                  applyingRemote = true
+                  state = normalizeState(remote)
+                  saveLocal()
+                  applyRoundUiFromState()
+                  renderAll()
+                  applyingRemote = false
+                  syncReady = true
+                  setSyncStatus('live')
+                  return
+                }
+                syncReady = true
+                schedulePush()
+                setSyncStatus('live')
+                return
+              }
+
               if (!remote) {
                 schedulePush()
                 setSyncStatus('live')
@@ -1712,13 +1747,21 @@
               }
               var next = normalizeState(remote)
               if (next.updatedAt < state.updatedAt && next.updatedBy !== clientId) {
-                // local newer — push
+                // Локальный «новее» по времени, но пустее — не затираем комнату.
+                if (stateRichness(next) > stateRichness(state)) {
+                  applyingRemote = true
+                  state = next
+                  saveLocal()
+                  applyRoundUiFromState()
+                  renderAll()
+                  applyingRemote = false
+                  setSyncStatus('live')
+                  return
+                }
                 schedulePush()
                 return
               }
               if (next.updatedAt === state.updatedAt && next.updatedBy === state.updatedBy) return
-              // Открытый локальный раунд нельзя затирать чужим state без того же token —
-              // иначе UI показывает одного игрока, а очки уходят другому.
               if (
                 !scoredThisRound &&
                 state.round &&
