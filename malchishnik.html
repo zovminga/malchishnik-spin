@@ -1,0 +1,600 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>МАЛЬЧИШНИК — рулетка</title>
+    <style>
+      :root {
+        --bg-deep: #050a08;
+        --gold: #f5c542;
+        --gold-soft: #fff4c2;
+        --neon-pink: #ff2d6a;
+        --neon-cyan: #2de2e6;
+        --ink: #f7f2e8;
+        --muted: #b8c4b8;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background: var(--bg-deep);
+        color: var(--ink);
+        font-family: Georgia, 'Times New Roman', serif;
+      }
+
+      body {
+        min-height: 100svh;
+        overflow-x: hidden;
+      }
+
+      .felt {
+        position: fixed;
+        inset: 0;
+        z-index: -2;
+        background:
+          radial-gradient(ellipse 90% 70% at 50% 35%, #145c38 0%, transparent 55%),
+          radial-gradient(ellipse 120% 80% at 50% 100%, #03140c 0%, transparent 50%),
+          linear-gradient(165deg, #0b2e1c 0%, #071a11 45%, #020805 100%);
+      }
+
+      .grid {
+        position: fixed;
+        inset: 0;
+        z-index: -1;
+        background-image:
+          linear-gradient(rgba(45, 226, 230, 0.05) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255, 45, 106, 0.04) 1px, transparent 1px);
+        background-size: 48px 48px;
+        mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, black, transparent);
+        animation: drift 18s linear infinite;
+        pointer-events: none;
+      }
+
+      .page {
+        position: relative;
+        min-height: 100svh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 1.25rem 1rem 2.5rem;
+      }
+
+      .page.flash::after {
+        content: '';
+        position: fixed;
+        inset: 0;
+        background: radial-gradient(
+          circle at 50% 40%,
+          rgba(245, 197, 66, 0.35),
+          transparent 55%
+        );
+        pointer-events: none;
+        animation: flash 0.9s ease-out forwards;
+        z-index: 5;
+      }
+
+      .hero {
+        width: min(100%, 42rem);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        gap: 0.65rem;
+      }
+
+      .brand {
+        margin: 0;
+        font-size: clamp(2.4rem, 11vw, 5rem);
+        line-height: 0.95;
+        letter-spacing: 0.03em;
+        color: var(--gold);
+        font-weight: 700;
+        text-transform: uppercase;
+        text-shadow:
+          0 0 0.15em rgba(255, 45, 106, 0.7),
+          0 0 0.45em rgba(245, 197, 66, 0.5),
+          3px 3px 0 #1a0d00;
+        animation: pulse 2.8s ease-in-out infinite;
+      }
+
+      h1 {
+        margin: 0.15rem 0 0;
+        font-size: clamp(1.15rem, 4.2vw, 1.85rem);
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        text-shadow: 0 2px 0 #000;
+      }
+
+      .lede {
+        margin: 0 0 0.4rem;
+        max-width: 28rem;
+        color: var(--muted);
+        font-size: clamp(0.95rem, 2.6vw, 1.05rem);
+        line-height: 1.4;
+        font-family: system-ui, sans-serif;
+      }
+
+      .roulette {
+        width: min(100%, 26rem);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 1.25rem;
+        margin-top: 0.35rem;
+      }
+
+      .wheel-stage {
+        position: relative;
+        width: min(88vw, 24rem);
+        aspect-ratio: 1;
+        filter: drop-shadow(0 18px 40px rgba(0, 0, 0, 0.55));
+      }
+
+      .wheel-stage.win {
+        animation: shake 0.55s ease-out;
+      }
+
+      .wheel {
+        width: 100%;
+        height: 100%;
+        border-radius: 50%;
+        will-change: transform;
+      }
+
+      .wheel svg {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+
+      .pointer {
+        position: absolute;
+        top: -0.35rem;
+        left: 50%;
+        z-index: 2;
+        width: 0;
+        height: 0;
+        transform: translateX(-50%);
+        border-left: 14px solid transparent;
+        border-right: 14px solid transparent;
+        border-top: 28px solid var(--gold);
+        filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+      }
+
+      .pointer::after {
+        content: '';
+        position: absolute;
+        top: -28px;
+        left: -7px;
+        width: 14px;
+        height: 14px;
+        background: var(--gold-soft);
+        border-radius: 50%;
+        box-shadow: 0 0 10px var(--gold);
+      }
+
+      .spin-btn {
+        appearance: none;
+        border: 3px solid var(--gold);
+        background: linear-gradient(180deg, #ff3d7a 0%, #b01040 100%);
+        color: #fff8f0;
+        font-family: system-ui, sans-serif;
+        font-size: clamp(1rem, 3.5vw, 1.25rem);
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        padding: 0.95rem 1.6rem;
+        min-width: min(100%, 18rem);
+        cursor: pointer;
+        box-shadow:
+          0 0 0 3px #1a0d00,
+          0 8px 0 #5c0820,
+          0 0 24px rgba(255, 45, 106, 0.45);
+        animation: breathe 2.2s ease-in-out infinite;
+      }
+
+      .spin-btn:hover:not(:disabled) {
+        filter: brightness(1.08);
+        transform: translateY(-2px);
+      }
+
+      .spin-btn:active:not(:disabled) {
+        transform: translateY(4px);
+        box-shadow:
+          0 0 0 3px #1a0d00,
+          0 3px 0 #5c0820,
+          0 0 18px rgba(255, 45, 106, 0.35);
+        animation: none;
+      }
+
+      .spin-btn:disabled {
+        cursor: wait;
+        filter: saturate(0.75);
+        animation: none;
+      }
+
+      .result {
+        min-height: 5.5rem;
+        width: min(100%, 28rem);
+        margin-top: 0.35rem;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.25rem;
+        font-family: system-ui, sans-serif;
+      }
+
+      .result-kicker {
+        margin: 0;
+        font-size: 0.85rem;
+        font-weight: 800;
+        letter-spacing: 0.28em;
+        color: var(--neon-cyan);
+      }
+
+      .result-label {
+        margin: 0;
+        font-size: clamp(2rem, 8vw, 3.2rem);
+        font-weight: 800;
+        line-height: 1;
+        text-shadow:
+          0 0 0.2em currentColor,
+          2px 2px 0 #000;
+        animation: pop 0.45s cubic-bezier(0.2, 1.4, 0.4, 1);
+      }
+
+      .result-tagline {
+        margin: 0.2rem 0 0;
+        max-width: 26rem;
+        color: var(--ink);
+        font-size: 1rem;
+        line-height: 1.35;
+      }
+
+      .result-placeholder {
+        margin: 0.75rem 0 0;
+        color: var(--muted);
+        font-size: 1rem;
+      }
+
+      .history {
+        width: min(100%, 28rem);
+        margin-top: 2rem;
+        text-align: left;
+        font-family: system-ui, sans-serif;
+      }
+
+      .history h2 {
+        margin: 0 0 0.65rem;
+        font-size: 0.95rem;
+        letter-spacing: 0.12em;
+        color: var(--gold-soft);
+        font-weight: 800;
+      }
+
+      .history ol {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: 0.4rem;
+      }
+
+      .history li {
+        display: flex;
+        align-items: center;
+        gap: 0.55rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+      }
+
+      .dot {
+        width: 0.7rem;
+        height: 0.7rem;
+        border-radius: 50%;
+        flex-shrink: 0;
+      }
+
+      .footer {
+        margin-top: auto;
+        padding-top: 2.5rem;
+        color: rgba(184, 196, 184, 0.8);
+        font-size: 0.8rem;
+        text-align: center;
+        font-family: system-ui, sans-serif;
+      }
+
+      .footer p {
+        margin: 0;
+      }
+
+      @keyframes pulse {
+        0%,
+        100% {
+          filter: brightness(1);
+          transform: scale(1);
+        }
+        50% {
+          filter: brightness(1.12);
+          transform: scale(1.015);
+        }
+      }
+
+      @keyframes breathe {
+        0%,
+        100% {
+          box-shadow:
+            0 0 0 3px #1a0d00,
+            0 8px 0 #5c0820,
+            0 0 20px rgba(255, 45, 106, 0.35);
+        }
+        50% {
+          box-shadow:
+            0 0 0 3px #1a0d00,
+            0 8px 0 #5c0820,
+            0 0 36px rgba(255, 45, 106, 0.65);
+        }
+      }
+
+      @keyframes drift {
+        from {
+          background-position: 0 0, 0 0;
+        }
+        to {
+          background-position: 0 48px, 48px 0;
+        }
+      }
+
+      @keyframes flash {
+        from {
+          opacity: 1;
+        }
+        to {
+          opacity: 0;
+        }
+      }
+
+      @keyframes shake {
+        0%,
+        100% {
+          transform: translateX(0);
+        }
+        20% {
+          transform: translateX(-4px) rotate(-0.5deg);
+        }
+        40% {
+          transform: translateX(4px) rotate(0.5deg);
+        }
+        60% {
+          transform: translateX(-3px);
+        }
+        80% {
+          transform: translateX(2px);
+        }
+      }
+
+      @keyframes pop {
+        from {
+          transform: scale(0.6);
+          opacity: 0;
+        }
+        to {
+          transform: scale(1);
+          opacity: 1;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .brand,
+        .spin-btn,
+        .grid,
+        .page.flash::after,
+        .wheel-stage.win,
+        .result-label {
+          animation: none !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="felt" aria-hidden="true"></div>
+    <div class="grid" aria-hidden="true"></div>
+
+    <div class="page" id="page">
+      <main class="hero">
+        <p class="brand">МАЛЬЧИШНИК</p>
+        <h1>Куда идём дальше?</h1>
+        <p class="lede">Крути рулетку — она решит маршрут. Спорить поздно.</p>
+
+        <div class="roulette">
+          <div class="wheel-stage" id="stage">
+            <div class="pointer" aria-hidden="true"></div>
+            <div class="wheel" id="wheel" aria-label="Рулетка мест"></div>
+          </div>
+          <button type="button" class="spin-btn" id="spinBtn">КРУТИТЬ РУЛЕТКУ</button>
+        </div>
+
+        <div class="result" id="result" aria-live="polite">
+          <p class="result-placeholder">Жми кнопку — судьба решит.</p>
+        </div>
+      </main>
+
+      <section class="history" id="history" hidden>
+        <h2>Уже выпадало</h2>
+        <ol id="historyList"></ol>
+      </section>
+
+      <footer class="footer">
+        <p>Только для своих. Ответственность за маршрут — на рулетке.</p>
+      </footer>
+    </div>
+
+    <script>
+      const DESTINATIONS = [
+        {
+          id: 'casino',
+          label: 'КАЗИНО',
+          tagline: 'Фишки, свет, чужая удача. Ставим на зеро и на друга.',
+          color: '#c41e3a',
+          text: '#fff8e7',
+        },
+        {
+          id: 'bar',
+          label: 'БАР',
+          tagline: 'Шоты, тосты и ни одного трезвого решения.',
+          color: '#1a6bff',
+          text: '#f0f7ff',
+        },
+        {
+          id: 'strip',
+          label: 'СТРИПУХА',
+          tagline: 'Неон, дым и легенды, которые лучше не вспоминать утром.',
+          color: '#ff2d6a',
+          text: '#fff0f5',
+        },
+        {
+          id: 'kc',
+          label: 'KC GRAD',
+          tagline: 'Культовый маршрут. Если выпало — значит судьба.',
+          color: '#00c853',
+          text: '#04150a',
+        },
+        {
+          id: 'comps',
+          label: 'КОМПЫ',
+          tagline: 'Интернет-клуб, реванш и «ещё одну катку».',
+          color: '#ff9f1a',
+          text: '#1a0d00',
+        },
+      ]
+
+      const SPIN_MS = 5200
+      const MIN_TURNS = 6
+      const slice = 360 / DESTINATIONS.length
+
+      const wheelEl = document.getElementById('wheel')
+      const stageEl = document.getElementById('stage')
+      const btn = document.getElementById('spinBtn')
+      const resultEl = document.getElementById('result')
+      const pageEl = document.getElementById('page')
+      const historySection = document.getElementById('history')
+      const historyList = document.getElementById('historyList')
+
+      let rotation = 0
+      let spinning = false
+      const history = []
+
+      function polar(cx, cy, r, angleDeg) {
+        const rad = ((angleDeg - 90) * Math.PI) / 180
+        return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) }
+      }
+
+      function slicePath(cx, cy, r, startAngle, endAngle) {
+        const start = polar(cx, cy, r, endAngle)
+        const end = polar(cx, cy, r, startAngle)
+        const large = endAngle - startAngle <= 180 ? 0 : 1
+        return `M ${cx} ${cy} L ${start.x} ${start.y} A ${r} ${r} 0 ${large} 0 ${end.x} ${end.y} Z`
+      }
+
+      function renderWheel() {
+        const bulbs = Array.from({ length: 24 }, (_, i) => {
+          const a = (i / 24) * 360
+          const p = polar(200, 200, 194, a)
+          return `<circle cx="${p.x}" cy="${p.y}" r="3.5" fill="${i % 2 ? '#fff8e7' : '#f5c542'}" />`
+        }).join('')
+
+        const segments = DESTINATIONS.map((d, i) => {
+          const start = i * slice
+          const end = start + slice
+          const mid = start + slice / 2
+          const label = polar(200, 200, 118, mid)
+          return `
+            <g>
+              <path d="${slicePath(200, 200, 190, start, end)}" fill="${d.color}" stroke="#0a1f14" stroke-width="2" />
+              <text
+                x="${label.x}" y="${label.y}"
+                fill="${d.text}" font-size="18" font-family="system-ui,sans-serif" font-weight="800"
+                text-anchor="middle" dominant-baseline="middle"
+                transform="rotate(${mid}, ${label.x}, ${label.y})"
+              >${d.label}</text>
+            </g>`
+        }).join('')
+
+        wheelEl.innerHTML = `
+          <svg viewBox="0 0 400 400" role="img" aria-label="Рулетка мест">
+            <circle cx="200" cy="200" r="198" fill="#0a1f14" />
+            ${segments}
+            <circle cx="200" cy="200" r="190" fill="none" stroke="#f5c542" stroke-width="8" />
+            <circle cx="200" cy="200" r="178" fill="none" stroke="#fff4c2" stroke-width="1.5" opacity="0.55" />
+            ${bulbs}
+            <circle cx="200" cy="200" r="42" fill="#0a1f14" stroke="#f5c542" stroke-width="6" />
+            <circle cx="200" cy="200" r="28" fill="#f5c542" />
+            <text x="200" y="206" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" font-weight="800" fill="#1a0d00">SPIN</text>
+          </svg>`
+      }
+
+      function showResult(dest) {
+        resultEl.innerHTML = `
+          <p class="result-kicker">ВЫПАЛО</p>
+          <p class="result-label" style="color:${dest.color}">${dest.label}</p>
+          <p class="result-tagline">${dest.tagline}</p>`
+
+        history.unshift(dest)
+        if (history.length > 8) history.length = 8
+        historySection.hidden = false
+        historyList.innerHTML = history
+          .map(
+            (item) =>
+              `<li><span class="dot" style="background:${item.color}"></span>${item.label}</li>`,
+          )
+          .join('')
+
+        pageEl.classList.remove('flash')
+        void pageEl.offsetWidth
+        pageEl.classList.add('flash')
+        stageEl.classList.remove('win')
+        void stageEl.offsetWidth
+        stageEl.classList.add('win')
+      }
+
+      function spin() {
+        if (spinning) return
+        spinning = true
+        btn.disabled = true
+        btn.textContent = 'КРУТИТСЯ…'
+        stageEl.classList.remove('win')
+        resultEl.innerHTML = '<p class="result-placeholder">Шарик ищет приключение…</p>'
+
+        const index = Math.floor(Math.random() * DESTINATIONS.length)
+        const segmentCenter = index * slice + slice / 2
+        const jitter = (Math.random() - 0.5) * (slice * 0.55)
+        const targetMod = (360 - segmentCenter + jitter + 360) % 360
+        const currentMod = ((rotation % 360) + 360) % 360
+        const delta =
+          ((targetMod - currentMod + 360) % 360) +
+          MIN_TURNS * 360 +
+          Math.floor(Math.random() * 360)
+
+        rotation += delta
+        wheelEl.style.transition = `transform ${SPIN_MS}ms cubic-bezier(0.12, 0.75, 0.08, 1)`
+        wheelEl.style.transform = `rotate(${rotation}deg)`
+
+        window.setTimeout(() => {
+          spinning = false
+          btn.disabled = false
+          btn.textContent = 'КРУТИТЬ РУЛЕТКУ'
+          showResult(DESTINATIONS[index])
+        }, SPIN_MS)
+      }
+
+      renderWheel()
+      btn.addEventListener('click', spin)
+    </script>
+  </body>
+</html>
