@@ -645,6 +645,9 @@
         <div class="top-actions">
           <button type="button" class="share" id="shareFriendsBtn">Скопировать ссылку</button>
           <button type="button" class="reset-game" id="resetGameBtn">Обнулить игру</button>
+          <button type="button" class="reset-game" id="hardResetBtn" style="border-color: var(--gold); flex-basis: 100%">
+            Сбросить кэш / разблокировать
+          </button>
         </div>
 
         <section class="panel" aria-label="Игроки">
@@ -715,7 +718,7 @@
       </section>
 
       <footer class="footer">
-        <p>Одна ссылка — одна игра на всех. <span id="buildTag" style="opacity:0.55">build 5</span></p>
+        <p>Одна ссылка — одна игра на всех. <span id="buildTag" style="opacity:0.55">build 6</span></p>
       </footer>
     </div>
 
@@ -1059,23 +1062,80 @@
           els.syncBar.textContent = ''
         }
 
+        function unlockUi() {
+          spinning = false
+          banditSpinning = false
+          els.spinBtn.disabled = false
+          els.banditBtn.disabled = false
+          els.banditBtn.hidden = false
+          els.scoreActions.hidden = true
+          els.scoreActions.setAttribute('hidden', '')
+        }
+
+        function abortRound(keepScores) {
+          unlockUi()
+          state.round = null
+          lastDest = null
+          lastChallenge = null
+          scoredThisRound = false
+          roundPlayer = null
+          els.banditBox.classList.remove('show')
+          els.challengeOut.textContent = ''
+          els.banditReel.innerHTML = ''
+          els.result.innerHTML = keepScores
+            ? '<p class="result-placeholder">Раунд сброшен — можно крутить</p>'
+            : '<p class="result-placeholder">Жми кнопку</p>'
+          var name = currentName()
+          els.spinBtn.textContent = state.players.length ? 'КРУТИТЬ · ' + name + '!!!' : 'КРУТИТЬ МЕСТО!!!'
+        }
+
         function resetGame() {
-          if (!confirm('Обнулить очки и лог ночи? Места и задания останутся.')) return
+          if (!confirm('Обнулить очки, лог и зависший раунд?\nМеста и задания останутся.')) return
+          abortRound(false)
+          state.players.forEach(function (p) {
+            p.score = 0
+          })
+          state.history = []
+          state.activePlayer = 0
+          touch()
+        }
+
+        function hardResetCache() {
+          if (
+            !confirm(
+              'Полный сброс кэша этого телефона?\n' +
+                'Очки/лог/раунд обнулятся у всех после синка.\n' +
+                'Страница перезагрузится.',
+            )
+          ) {
+            return
+          }
+          abortRound(false)
+          try {
+            localStorage.removeItem(LOCAL_KEY)
+            localStorage.removeItem(SYNC_KEY)
+            localStorage.removeItem('malchishnik-state-v2')
+            localStorage.removeItem('malchishnik-state-v1')
+          } catch (e) {}
           state.players.forEach(function (p) {
             p.score = 0
           })
           state.history = []
           state.activePlayer = 0
           state.round = null
-          lastDest = null
-          lastChallenge = null
-          scoredThisRound = false
-          roundPlayer = null
-          els.result.innerHTML = '<p class="result-placeholder">Жми кнопку</p>'
-          els.banditBox.classList.remove('show')
-          els.challengeOut.textContent = ''
-          els.scoreActions.hidden = true
+          // Пушим чистый state, потом жёсткий reload.
           touch()
+          setTimeout(function () {
+            location.reload()
+          }, 350)
+        }
+
+        function refreshBanditIfCurrentPlace(placeId) {
+          if (!lastDest || lastDest.id !== placeId) return
+          if (scoredThisRound) return
+          if (!roundIsOpen() && !lastDest) return
+          // Место уже выпало, список заданий изменили — пересобрать бандит.
+          setupBandit(lastDest)
         }
 
         function placeHasChallenges(dest) {
@@ -1471,7 +1531,14 @@
             return
           }
           if (roundIsOpen()) {
-            alert('Сначала зачти очки за текущий раунд')
+            if (
+              confirm(
+                'Раунд ещё не закрыт (или завис).\nСбросить раунд и крутить заново?',
+              )
+            ) {
+              abortRound(true)
+              touch()
+            }
             return
           }
           spinning = true
@@ -1706,9 +1773,11 @@
           try {
             var sync = JSON.parse(localStorage.getItem(SYNC_KEY) || 'null')
             if (sync && sync.config) {
+              // ?room= в URL важнее сохранённой комнаты — для тестов и отдельных игр.
+              var room = DEFAULT_ROOM || sync.room || 'malchishnik'
               els.firebaseConfigInput.value = JSON.stringify(sync.config, null, 2)
-              els.roomInput.value = sync.room || 'malchishnik'
-              connectFirebase(sync.config, sync.room)
+              els.roomInput.value = room
+              connectFirebase(sync.config, room)
             }
           } catch (e) {}
         }
@@ -1777,6 +1846,7 @@
         })
 
         document.getElementById('resetGameBtn').addEventListener('click', resetGame)
+        document.getElementById('hardResetBtn').addEventListener('click', hardResetCache)
 
         els.editorList.addEventListener('change', function (e) {
           var t = e.target
@@ -1805,8 +1875,10 @@
               alert('Оставь хотя бы 2 места')
               return
             }
+            var removedId = d.id
             state.destinations.splice(di, 1)
             delete state.challenges[d.id]
+            if (lastDest && lastDest.id === removedId) abortRound(true)
             touch()
             return
           }
@@ -1814,6 +1886,7 @@
             var idx = parseInt(t.getAttribute('data-del-chal'), 10)
             state.challenges[d.id].splice(idx, 1)
             touch()
+            refreshBanditIfCurrentPlace(d.id)
             return
           }
           if (t.getAttribute('data-add-chal') != null) {
@@ -1822,6 +1895,7 @@
             if (!text) return
             state.challenges[d.id].push(text)
             touch()
+            refreshBanditIfCurrentPlace(d.id)
           }
         })
 
