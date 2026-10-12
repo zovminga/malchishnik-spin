@@ -81,16 +81,19 @@
       }
       .sync-bar {
         width: min(100%, 27rem);
-        display: flex;
+        display: none;
         align-items: center;
-        justify-content: space-between;
+        justify-content: center;
         gap: 0.5rem;
-        padding: 0.45rem 0.6rem;
-        margin-bottom: 0.4rem;
+        padding: 0.35rem 0.6rem;
+        margin-bottom: 0.35rem;
         background: rgba(0, 0, 0, 0.65);
         border: 2px solid #444;
-        font-size: 0.8rem;
+        font-size: 0.78rem;
         font-weight: 800;
+      }
+      .sync-bar.show {
+        display: flex;
       }
       .sync-bar.live {
         border-color: var(--lime);
@@ -101,8 +104,36 @@
         color: #bbb;
       }
       .sync-bar.error {
+        display: flex;
         border-color: var(--red);
         color: #ff8a8a;
+      }
+      .top-actions {
+        width: min(100%, 27rem);
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.45rem;
+        margin: 0.55rem 0 0.15rem;
+      }
+      .top-actions button {
+        flex: 1 1 8rem;
+        min-height: 2.6rem;
+        border: 2px solid #fff;
+        font-family: inherit;
+        font-weight: 900;
+        font-size: 0.78rem;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        cursor: pointer;
+      }
+      .top-actions .share {
+        background: var(--lime);
+        color: #111;
+      }
+      .top-actions .reset-game {
+        background: #111;
+        color: #fff;
+        border-color: var(--pink);
       }
       .ticker {
         width: 100vw;
@@ -598,7 +629,7 @@
     <div class="fx" id="fx" aria-hidden="true"></div>
 
     <div class="page" id="page">
-      <div class="sync-bar local" id="syncBar">● Локально — включи синк, чтобы все были в одной рулетке</div>
+      <div class="sync-bar" id="syncBar" hidden></div>
 
       <div class="ticker" aria-hidden="true">
         <div class="ticker-track" id="tickerA"></div>
@@ -607,7 +638,11 @@
       <main class="hero">
         <p class="brand">МАЛЬЧИШНИК</p>
         <h1>Куда идём дальше?</h1>
-        <p class="lede">Общая рулетка: места, задания и очки синхронизируются у всех.</p>
+        <p class="lede">Крути рулетку. Списки и очки общие у всех по одной ссылке.</p>
+        <div class="top-actions">
+          <button type="button" class="share" id="shareFriendsBtn">Скопировать ссылку</button>
+          <button type="button" class="reset-game" id="resetGameBtn">Обнулить игру</button>
+        </div>
 
         <section class="panel" aria-label="Игроки">
           <h2>★ Кто крутит ★</h2>
@@ -647,38 +682,20 @@
           </div>
         </section>
 
-        <button type="button" class="toggle" id="editorToggle">★ Места / задания / синк ★</button>
+        <button type="button" class="toggle" id="editorToggle">★ Места и задания ★</button>
 
         <section class="editor" id="editor">
           <h2 style="color: var(--cyan); font-size: 0.82rem; letter-spacing: 0.12em">
-            ★ ОБЩИЙ РЕДАКТОР ★
+            ★ МЕСТА И ЗАДАНИЯ ★
           </h2>
-          <p class="editor-help">
-            Все на одной ссылке — одна рулетка, одни места, задания и очки.
-            Жми «★ Места / задания / синк ★», правь список — друзья видят сразу.
-          </p>
+          <p class="editor-help">Добавляй и удаляй. Изменения сразу у всех по ссылке.</p>
+          <textarea id="firebaseConfigInput" hidden aria-hidden="true"></textarea>
+          <input id="roomInput" type="hidden" value="malchishnik" />
+          <button type="button" id="connectBtn" hidden></button>
+          <button type="button" id="disconnectBtn" hidden></button>
 
-          <div class="panel" style="border-color: var(--cyan); margin-top: 0">
-            <h2>Общая комната</h2>
-            <p class="editor-help">
-              Синк включается сам. Кинь друзьям обычную ссылку на сайт —
-              у всех одна комната. Ничего настраивать не надо.
-            </p>
-            <textarea id="firebaseConfigInput" hidden aria-hidden="true"></textarea>
-            <input id="roomInput" type="hidden" value="malchishnik" />
-            <div class="editor-actions">
-              <button type="button" class="lime" id="shareFriendsBtn">Скопировать ссылку</button>
-              <button type="button" class="secondary" id="disconnectBtn" hidden>Отключить</button>
-              <button type="button" class="cyan" id="connectBtn" hidden>Подключить синк</button>
-            </div>
-          </div>
-
-          <div class="editor-actions" style="margin-top: 0.65rem">
+          <div class="editor-actions" style="margin-top: 0.35rem">
             <button type="button" class="cyan" id="addPlaceBtn">+ Место</button>
-            <button type="button" class="secondary" id="exportBtn">Экспорт JSON</button>
-            <button type="button" class="secondary" id="importBtn">Импорт JSON</button>
-            <button type="button" class="danger" id="resetBtn">Сброс дефолт</button>
-            <input id="importFile" type="file" accept="application/json,.json" hidden />
           </div>
           <div id="editorList"></div>
         </section>
@@ -695,7 +712,7 @@
       </section>
 
       <footer class="footer">
-        <p>Одна комната на всех. Правьте списки прямо на месте.</p>
+        <p>Одна ссылка — одна игра на всех.</p>
       </footer>
     </div>
 
@@ -941,8 +958,34 @@
         }
 
         function setSyncStatus(mode, text) {
-          els.syncBar.className = 'sync-bar ' + mode
-          els.syncBar.textContent = text
+          // Технические статусы синка прячем — пользователю не нужны.
+          // Показываем только короткую ошибку, если совсем упало.
+          if (mode === 'error') {
+            els.syncBar.hidden = false
+            els.syncBar.className = 'sync-bar show error'
+            els.syncBar.textContent = text || '● Не удалось синхронизировать'
+            return
+          }
+          els.syncBar.hidden = true
+          els.syncBar.className = 'sync-bar'
+          els.syncBar.textContent = ''
+        }
+
+        function resetGame() {
+          if (!confirm('Обнулить очки и лог ночи? Места и задания останутся.')) return
+          state.players.forEach(function (p) {
+            p.score = 0
+          })
+          state.history = []
+          state.activePlayer = 0
+          lastDest = null
+          lastChallenge = null
+          scoredThisRound = false
+          els.result.innerHTML = '<p class="result-placeholder">Жми кнопку</p>'
+          els.banditBox.classList.remove('show')
+          els.challengeOut.textContent = ''
+          els.scoreActions.hidden = true
+          touch()
         }
 
         function schedulePush() {
@@ -1156,34 +1199,15 @@
               '" data-id="' +
               esc(d.id) +
               '">' +
-              '<h3 style="color:' +
-              d.color +
-              '">' +
-              esc(d.label) +
-              '</h3>' +
               '<div class="place-meta">' +
               '<input data-field="label" value="' +
               esc(d.label) +
-              '" maxlength="16" placeholder="Название" />' +
-              '<input data-field="tagline" value="' +
-              esc(d.tagline) +
-              '" maxlength="100" placeholder="Описание" />' +
-              '<select data-field="color">' +
-              PRESET_COLORS.map(function (c) {
-                return (
-                  '<option value="' +
-                  c +
-                  '"' +
-                  (c === d.color ? ' selected' : '') +
-                  '>' +
-                  c +
-                  '</option>'
-                )
-              }).join('') +
-              '</select>' +
-              '<button type="button" class="mini danger" data-del-place>Удалить место</button>' +
+              '" maxlength="16" placeholder="Название места" style="border-color:' +
+              d.color +
+              '" />' +
+              '<button type="button" class="mini danger" data-del-place>Удалить</button>' +
               '</div>'
-            if (!list.length) html += '<p class="empty-chal">Заданий нет — бандит не появится</p>'
+            if (!list.length) html += '<p class="empty-chal">Заданий нет — только место</p>'
             list.forEach(function (t, j) {
               html +=
                 '<div class="chal-row"><span>' +
@@ -1381,13 +1405,13 @@
             firebaseApp = firebase.initializeApp(config)
             var roomId = (room || 'malchishnik').replace(/[^\w\-]/g, '').slice(0, 40) || 'malchishnik'
             dbRef = firebase.database().ref('rooms/' + roomId + '/state')
-            setSyncStatus('live', '● Подключаемся к комнате ' + roomId + '…')
+            setSyncStatus('live')
 
             dbUnsub = function (snap) {
               var remote = snap.val()
               if (!remote) {
                 schedulePush()
-                setSyncStatus('live', '● LIVE · комната ' + roomId + ' · ждём данные')
+                setSyncStatus('live')
                 return
               }
               var next = normalizeState(remote)
@@ -1403,7 +1427,7 @@
               saveLocal()
               renderAll()
               applyingRemote = false
-              setSyncStatus('live', '● LIVE · комната ' + roomId + ' · общая рулетка')
+              setSyncStatus('live')
             }
             dbRef.on('value', dbUnsub)
 
@@ -1411,12 +1435,12 @@
               SYNC_KEY,
               JSON.stringify({ config: config, room: roomId }),
             )
-            els.roomInput.value = roomId
-            els.firebaseConfigInput.value = JSON.stringify(config, null, 2)
+            if (els.roomInput) els.roomInput.value = roomId
+            if (els.firebaseConfigInput)
+              els.firebaseConfigInput.value = JSON.stringify(config, null, 2)
           } catch (err) {
             dbRef = null
-            setSyncStatus('error', '● Синк не поднялся: ' + (err.message || err))
-            alert('Не удалось подключить Firebase:\n' + (err.message || err))
+            setSyncStatus('error', '● Общая комната недоступна')
           }
         }
 
@@ -1425,7 +1449,7 @@
           dbUnsub = null
           dbRef = null
           localStorage.removeItem(SYNC_KEY)
-          setSyncStatus('local', '● Локально — синк выключен')
+          setSyncStatus('local')
         }
 
         function shareFriendsLink() {
@@ -1524,37 +1548,7 @@
           touch()
         })
 
-        document.getElementById('exportBtn').addEventListener('click', function () {
-          var blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' })
-          var a = document.createElement('a')
-          a.href = URL.createObjectURL(blob)
-          a.download = 'malchishnik-state.json'
-          a.click()
-        })
-        document.getElementById('importBtn').addEventListener('click', function () {
-          document.getElementById('importFile').click()
-        })
-        document.getElementById('importFile').addEventListener('change', function (e) {
-          var f = e.target.files && e.target.files[0]
-          if (!f) return
-          var reader = new FileReader()
-          reader.onload = function () {
-            try {
-              state = normalizeState(JSON.parse(String(reader.result || '')))
-              touch()
-              alert('Импортировано')
-            } catch (err) {
-              alert('Битый JSON')
-            }
-          }
-          reader.readAsText(f)
-          e.target.value = ''
-        })
-        document.getElementById('resetBtn').addEventListener('click', function () {
-          if (!confirm('Сбросить места/задания к дефолту? Очки тоже сбросятся.')) return
-          state = defaultState()
-          touch()
-        })
+        document.getElementById('resetGameBtn').addEventListener('click', resetGame)
 
         els.editorList.addEventListener('change', function (e) {
           var t = e.target
@@ -1565,8 +1559,6 @@
           if (!d) return
           var field = t.getAttribute('data-field')
           if (field === 'label') d.label = String(t.value || 'МЕСТО').slice(0, 16).toUpperCase()
-          if (field === 'tagline') d.tagline = String(t.value || '')
-          if (field === 'color') d.color = t.value
           touch()
         })
 
@@ -1609,11 +1601,12 @@
         tryBootFromHash()
         if (!dbRef) tryBootSavedSync()
         if (!dbRef) {
-          els.firebaseConfigInput.value = JSON.stringify(DEFAULT_FIREBASE, null, 2)
-          els.roomInput.value = DEFAULT_ROOM
+          if (els.firebaseConfigInput)
+            els.firebaseConfigInput.value = JSON.stringify(DEFAULT_FIREBASE, null, 2)
+          if (els.roomInput) els.roomInput.value = DEFAULT_ROOM
           connectFirebase(DEFAULT_FIREBASE, DEFAULT_ROOM)
         }
-        if (!dbRef) setSyncStatus('local', '● Локально — синк не поднялся')
+        if (!dbRef) setSyncStatus('error', '● Общая комната недоступна')
       })()
     </script>
   </body>
