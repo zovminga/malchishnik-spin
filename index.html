@@ -743,7 +743,7 @@
       <footer class="footer">
         <p>Одна ссылка — одна игра на всех.</p>
         <div class="footer-tools">
-          <span id="buildTag">build 12</span>
+          <span id="buildTag">build 13</span>
           <button type="button" id="hardResetBtn">сброс кэша</button>
         </div>
       </footer>
@@ -888,12 +888,14 @@
         var rotation = 0
         var spinning = false
         var banditSpinning = false
-        var lastDest = null
-        var lastChallenge = null
-        var scoredThisRound = false
-        // Игрок, который крутил место в этом раунде — очки всегда ему,
-        // даже если activePlayer уже сменился или кто-то ткнул чип.
-        var roundPlayer = null
+        // Round Session fields (locality: ownership/openness live here, not as free globals).
+        // Wire shape of state.round is unchanged; localOwner/localScored keep mid-sync priority.
+        var RoundSession = {
+          place: null,
+          challenge: null,
+          localScored: false,
+          localOwner: null,
+        }
         var applyingRemote = false
         var pushTimer = null
         var dbRef = null
@@ -958,7 +960,7 @@
           }
         }
 
-        function emptyRound(owner) {
+        RoundSession.empty = function (owner) {
           return {
             owner: Math.max(0, Number(owner) || 0),
             placeId: null,
@@ -970,11 +972,15 @@
           }
         }
 
-        function roundOwnerIndex() {
+        RoundSession.ownerIndex = function () {
           // Локальный владелец спина важнее синка: иначе UI показывает одного,
           // а очки уходят другому после затирания state.round.
-          if (!scoredThisRound && roundPlayer != null && state.players[roundPlayer]) {
-            return roundPlayer
+          if (
+            !RoundSession.localScored &&
+            RoundSession.localOwner != null &&
+            state.players[RoundSession.localOwner]
+          ) {
+            return RoundSession.localOwner
           }
           if (state.round && !state.round.scored && state.players[state.round.owner]) {
             return state.round.owner
@@ -982,9 +988,35 @@
           return state.activePlayer
         }
 
-        function roundIsOpen() {
-          if (!scoredThisRound && roundPlayer != null) return true
+        RoundSession.isOpen = function () {
+          if (!RoundSession.localScored && RoundSession.localOwner != null) return true
           return !!(state.round && !state.round.scored)
+        }
+
+        RoundSession.clearLocal = function () {
+          RoundSession.place = null
+          RoundSession.challenge = null
+          RoundSession.localOwner = null
+          RoundSession.localScored = false
+        }
+
+        RoundSession.open = function (ownerIdx) {
+          state.round = RoundSession.empty(ownerIdx)
+          RoundSession.localOwner = state.round.owner
+          RoundSession.place = null
+          RoundSession.challenge = null
+          RoundSession.localScored = false
+        }
+
+        // Thin aliases — same interface for existing call sites during deepening.
+        function emptyRound(owner) {
+          return RoundSession.empty(owner)
+        }
+        function roundOwnerIndex() {
+          return RoundSession.ownerIndex()
+        }
+        function roundIsOpen() {
+          return RoundSession.isOpen()
         }
 
         function ownerName(idx) {
@@ -996,10 +1028,7 @@
           lockRoundAfterScore()
           els.banditBox.classList.remove('show')
           els.challengeOut.textContent = ''
-          lastDest = null
-          lastChallenge = null
-          roundPlayer = null
-          scoredThisRound = false
+          RoundSession.clearLocal()
           state.round = null
           var name = ownerName(nextIdx)
           els.result.innerHTML =
@@ -1107,10 +1136,7 @@
         function abortRound(keepScores) {
           unlockUi()
           state.round = null
-          lastDest = null
-          lastChallenge = null
-          scoredThisRound = false
-          roundPlayer = null
+          RoundSession.clearLocal()
           els.banditBox.classList.remove('show')
           els.challengeOut.textContent = ''
           els.banditReel.innerHTML = ''
@@ -1163,22 +1189,92 @@
         }
 
         function refreshBanditIfCurrentPlace(placeId) {
-          if (!lastDest || lastDest.id !== placeId) return
-          if (scoredThisRound) return
-          if (!roundIsOpen() && !lastDest) return
+          if (!RoundSession.place || RoundSession.place.id !== placeId) return
+          if (RoundSession.localScored) return
+          if (!roundIsOpen() && !RoundSession.place) return
           // Место уже выпало, список заданий изменили — пересобрать бандит.
-          setupBandit(lastDest)
+          setupBandit(RoundSession.place)
         }
 
         function placeHasChallenges(dest) {
-          if (!dest) return false
-          var list = state.challenges[dest.id] || []
-          return list.length > 0
+          return Scoring.placeHasChallenges(dest)
+        }
+
+        // Scoring: deep rules behind a small interface; DOM only applies the patch.
+        var Scoring = {
+          placeHasChallenges: function (dest) {
+            if (!dest) return false
+            var list = state.challenges[dest.id] || []
+            return list.length > 0
+          },
+          outcome: function (dest, kind) {
+            var has = Scoring.placeHasChallenges(dest)
+            if (kind === 'done') {
+              return has
+                ? { points: 2, note: 'выполнил' }
+                : { points: 1, note: 'был там' }
+            }
+            return has ? { points: 0, note: 'слил' } : { points: 0, note: 'мимо' }
+          },
+          // Returns null if not awardable; otherwise a patch for players/history/round.
+          decide: function (ctx) {
+            var place = ctx.place
+            var challenge = ctx.challenge
+            var players = ctx.players
+            if (!players.length || !place) return { ok: false, reason: 'no-place' }
+            if (ctx.localScored || (ctx.round && ctx.round.scored)) {
+              return { ok: false, reason: 'already-scored' }
+            }
+            if (Scoring.placeHasChallenges(place) && !challenge) {
+              return { ok: false, reason: 'need-challenge' }
+            }
+            var whoIdx = ctx.ownerIndex
+            if (whoIdx == null || !players[whoIdx]) whoIdx = ctx.activePlayer
+            var nextIdx = (whoIdx + 1) % players.length
+            return {
+              ok: true,
+              whoIdx: whoIdx,
+              nextIdx: nextIdx,
+              points: ctx.points,
+              note: ctx.note,
+              placeId: place.id,
+              placeLabel: place.label,
+              placeColor: place.color,
+              challenge: challenge,
+              historyEntry: {
+                who: players[whoIdx].name,
+                place: place.label,
+                challenge: challenge,
+                note: ctx.note + ' (' + (ctx.points >= 0 ? '+' : '') + ctx.points + ')',
+                color: place.color,
+              },
+            }
+          },
+        }
+
+        // Challenge pick (deep) vs BanditAdapter (presentation).
+        var ChallengePick = {
+          pickIndex: function (list) {
+            if (!list || !list.length) return -1
+            return Math.floor(Math.random() * list.length)
+          },
+        }
+
+        var BanditAdapter = {
+          refreshIfCurrentPlace: function (placeId) {
+            refreshBanditIfCurrentPlace(placeId)
+          },
+          setup: function (dest) {
+            setupBandit(dest)
+          },
+          spin: function () {
+            spinBandit()
+          },
         }
 
         function roundPlayerName() {
-          if (roundPlayer == null || !state.players[roundPlayer]) return currentName()
-          return state.players[roundPlayer].name
+          if (RoundSession.localOwner == null || !state.players[RoundSession.localOwner]) return currentName()
+          return state.players[RoundSession.localOwner].name
         }
 
         function lockRoundAfterScore() {
@@ -1201,6 +1297,67 @@
           return (s.history || []).length * 100 + players.length * 10 + scoreSum
         }
 
+        // Deep modules: RoomState owns wire shape; MergePolicy owns accept/write.
+        // Firebase I/O stays a thin adapter that calls these interfaces.
+        var RoomState = {
+          default: defaultState,
+          normalize: normalizeState,
+          richness: stateRichness,
+        }
+
+        var MergePolicy = {
+          // Transaction: return value to write, or undefined to abort.
+          shouldWrite: function (current, toWrite, writerId) {
+            if (current === null) return toWrite
+            var cur = RoomState.normalize(current)
+            var remoteR = RoomState.richness(cur)
+            var localR = RoomState.richness(toWrite)
+            // Никогда не затираем более богатую комнату более пустой.
+            if (remoteR > localR) return
+            if (
+              cur.updatedAt > toWrite.updatedAt &&
+              cur.updatedBy !== writerId &&
+              remoteR >= localR
+            ) {
+              return
+            }
+            return toWrite
+          },
+          // on('value') after first snapshot: decide apply / push / ignore.
+          // First-snapshot boot stays in the Firebase adapter (side effects).
+          decideRemote: function (ctx) {
+            var remote = ctx.remote
+            var local = ctx.local
+            var writerId = ctx.clientId
+            if (!remote) {
+              return RoomState.richness(local) > 0 ? { action: 'push' } : { action: 'ignore' }
+            }
+            var next = RoomState.normalize(remote)
+            if (next.updatedAt < local.updatedAt && next.updatedBy !== writerId) {
+              if (RoomState.richness(next) > RoomState.richness(local)) {
+                return { action: 'apply', state: next }
+              }
+              return { action: 'push' }
+            }
+            if (next.updatedAt === local.updatedAt && next.updatedBy === local.updatedBy) {
+              return { action: 'ignore' }
+            }
+            if (
+              !ctx.scoredThisRound &&
+              local.round &&
+              !local.round.scored &&
+              local.round.token &&
+              (!next.round || next.round.token !== local.round.token)
+            ) {
+              return { action: 'push' }
+            }
+            if ((ctx.spinning || ctx.banditSpinning) && !(next.round && next.round.scored)) {
+              return { action: 'ignore' }
+            }
+            return { action: 'apply', state: next }
+          },
+        }
+
         function schedulePush() {
           if (applyingRemote) return
           // До первого снимка комнаты не трогаем updatedAt — иначе пустой
@@ -1218,20 +1375,7 @@
             var toWrite = JSON.parse(JSON.stringify(state))
             dbRef
               .transaction(function (current) {
-                if (current === null) return toWrite
-                var cur = normalizeState(current)
-                var remoteR = stateRichness(cur)
-                var localR = stateRichness(toWrite)
-                // Никогда не затираем более богатую комнату более пустой.
-                if (remoteR > localR) return
-                if (
-                  cur.updatedAt > toWrite.updatedAt &&
-                  cur.updatedBy !== clientId &&
-                  remoteR >= localR
-                ) {
-                  return
-                }
-                return toWrite
+                return MergePolicy.shouldWrite(current, toWrite, clientId)
               })
               .catch(function () {
                 setSyncStatus('error', '● Не удалось сохранить общий список')
@@ -1498,33 +1642,33 @@
 
         function applyRoundUiFromState() {
           if (!state.round) {
-            roundPlayer = null
+            RoundSession.localOwner = null
             return
           }
-          roundPlayer = state.round.owner
-          scoredThisRound = !!state.round.scored
+          RoundSession.localOwner = state.round.owner
+          RoundSession.localScored = !!state.round.scored
           if (state.round.placeId) {
             for (var i = 0; i < state.destinations.length; i++) {
               if (state.destinations[i].id === state.round.placeId) {
-                lastDest = state.destinations[i]
+                RoundSession.place = state.destinations[i]
                 break
               }
             }
           }
-          if (state.round.challenge != null) lastChallenge = state.round.challenge
+          if (state.round.challenge != null) RoundSession.challenge = state.round.challenge
           if (state.round.scored) lockRoundAfterScore()
         }
 
         function setupBandit(dest) {
-          lastDest = dest
-          lastChallenge = state.round && state.round.challenge != null ? state.round.challenge : null
-          scoredThisRound = !!(state.round && state.round.scored)
+          RoundSession.place = dest
+          RoundSession.challenge = state.round && state.round.challenge != null ? state.round.challenge : null
+          RoundSession.localScored = !!(state.round && state.round.scored)
           els.scoreActions.hidden = true
-          els.challengeOut.textContent = lastChallenge || ''
-          if (scoredThisRound) {
+          els.challengeOut.textContent = RoundSession.challenge || ''
+          if (RoundSession.localScored) {
             els.banditBox.classList.add('show')
             lockRoundAfterScore()
-            if (lastChallenge) els.challengeOut.textContent = lastChallenge
+            if (RoundSession.challenge) els.challengeOut.textContent = RoundSession.challenge
             return
           }
           var list = state.challenges[dest.id] || []
@@ -1540,11 +1684,11 @@
           }
           els.banditBtn.hidden = false
           els.banditBtn.disabled = false
-          els.banditBtn.textContent = lastChallenge ? 'ДРУГОЕ ЗАДАНИЕ' : 'КРУТИТЬ ЗАДАНИЕ'
+          els.banditBtn.textContent = RoundSession.challenge ? 'ДРУГОЕ ЗАДАНИЕ' : 'КРУТИТЬ ЗАДАНИЕ'
           document.getElementById('doneBtn').textContent = '+2 выполнил'
           document.getElementById('failBtn').textContent = '+0 слил'
-          if (lastChallenge) {
-            els.challengeOut.textContent = lastChallenge
+          if (RoundSession.challenge) {
+            els.challengeOut.textContent = RoundSession.challenge
             showScoreActions()
           }
           var items = []
@@ -1607,11 +1751,7 @@
           }
           spinning = true
           // Владелец раунда пишется в общий state — на всех телефонах один и тот же.
-          state.round = emptyRound(state.activePlayer)
-          roundPlayer = state.round.owner
-          lastDest = null
-          lastChallenge = null
-          scoredThisRound = false
+          RoundSession.open(state.activePlayer)
           els.spinBtn.disabled = true
           els.spinBtn.textContent = 'КРУТИТСЯ!!!'
           els.banditBox.classList.remove('show')
@@ -1654,18 +1794,18 @@
         }
 
         function spinBandit() {
-          if (banditSpinning || !lastDest || scoredThisRound) return
+          if (banditSpinning || !RoundSession.place || RoundSession.localScored) return
           if (state.round && state.round.scored) return
-          var list = state.challenges[lastDest.id] || []
+          var list = state.challenges[RoundSession.place.id] || []
           if (!list.length) return
           banditSpinning = true
           els.scoreActions.hidden = true
           els.banditBtn.disabled = true
           els.challengeOut.textContent = ''
-          lastChallenge = null
+          RoundSession.challenge = null
           var first = els.banditReel.querySelector('.bandit-item')
           var itemH = first ? first.getBoundingClientRect().height : 52
-          var pick = Math.floor(Math.random() * list.length)
+          var pick = ChallengePick.pickIndex(list)
           var y = -(4 * list.length + pick) * itemH
           els.banditReel.style.transition = 'none'
           els.banditReel.style.transform = 'translateY(0)'
@@ -1674,55 +1814,52 @@
             'transform ' + BANDIT_MS + 'ms cubic-bezier(0.12, 0.8, 0.05, 1)'
           els.banditReel.style.transform = 'translateY(' + y + 'px)'
           setTimeout(function () {
-            lastChallenge = list[pick]
-            els.challengeOut.textContent = lastChallenge
+            RoundSession.challenge = list[pick]
+            els.challengeOut.textContent = RoundSession.challenge
             banditSpinning = false
-            if (scoredThisRound || (state.round && state.round.scored)) {
+            if (RoundSession.localScored || (state.round && state.round.scored)) {
               lockRoundAfterScore()
               return
             }
             if (state.round) {
-              state.round.challenge = lastChallenge
+              state.round.challenge = RoundSession.challenge
               touch()
             }
             els.banditBtn.disabled = false
             els.banditBtn.textContent = 'ДРУГОЕ ЗАДАНИЕ'
             showScoreActions()
-            burst(lastDest.color)
+            burst(RoundSession.place.color)
           }, BANDIT_MS)
         }
 
         function award(points, note) {
-          if (!state.players.length || !lastDest) return
-          if (scoredThisRound || (state.round && state.round.scored)) return
-          if (placeHasChallenges(lastDest) && !lastChallenge) {
-            alert('Сначала крутани задание')
+          var patch = Scoring.decide({
+            place: RoundSession.place,
+            challenge: RoundSession.challenge,
+            players: state.players,
+            round: state.round,
+            localScored: RoundSession.localScored,
+            ownerIndex: roundOwnerIndex(),
+            activePlayer: state.activePlayer,
+            points: points,
+            note: note,
+          })
+          if (!patch.ok) {
+            if (patch.reason === 'need-challenge') alert('Сначала крутани задание')
             return
           }
-          var whoIdx = roundOwnerIndex()
-          if (whoIdx == null || !state.players[whoIdx]) whoIdx = state.activePlayer
-          var placeLabel = lastDest.label
-          var placeColor = lastDest.color
-          var challenge = lastChallenge
-          scoredThisRound = true
+          RoundSession.localScored = true
           if (state.round) {
             state.round.scored = true
-            state.round.challenge = challenge
-            state.round.placeId = lastDest.id
-            state.round.placeLabel = placeLabel
+            state.round.challenge = patch.challenge
+            state.round.placeId = patch.placeId
+            state.round.placeLabel = patch.placeLabel
           }
-          state.players[whoIdx].score += points
-          state.history.unshift({
-            who: state.players[whoIdx].name,
-            place: placeLabel,
-            challenge: challenge,
-            note: note + ' (' + (points >= 0 ? '+' : '') + points + ')',
-            color: placeColor,
-          })
+          state.players[patch.whoIdx].score += patch.points
+          state.history.unshift(patch.historyEntry)
           if (state.history.length > 20) state.history.length = 20
-          var nextIdx = (whoIdx + 1) % state.players.length
-          state.activePlayer = nextIdx
-          finishRoundUi(nextIdx)
+          state.activePlayer = patch.nextIdx
+          finishRoundUi(patch.nextIdx)
           touch()
         }
 
@@ -1768,47 +1905,31 @@
                 return
               }
 
-              if (!remote) {
-                // Пустая комната на сервере — сидим только если локально уже есть игроки/история.
-                if (stateRichness(state) > 0) schedulePush()
+              var decision = MergePolicy.decideRemote({
+                remote: remote,
+                local: state,
+                clientId: clientId,
+                scoredThisRound: RoundSession.localScored,
+                spinning: spinning,
+                banditSpinning: banditSpinning,
+              })
+              if (decision.action === 'push') {
+                schedulePush()
                 setSyncStatus('live')
                 return
               }
-              var next = normalizeState(remote)
-              if (next.updatedAt < state.updatedAt && next.updatedBy !== clientId) {
-                // Локальный «новее» по времени, но пустее — не затираем комнату.
-                if (stateRichness(next) > stateRichness(state)) {
-                  applyingRemote = true
-                  state = next
-                  saveLocal()
-                  applyRoundUiFromState()
-                  renderAll()
-                  applyingRemote = false
-                  setSyncStatus('live')
-                  return
-                }
-                schedulePush()
+              if (decision.action === 'ignore') {
+                setSyncStatus('live')
                 return
               }
-              if (next.updatedAt === state.updatedAt && next.updatedBy === state.updatedBy) return
-              if (
-                !scoredThisRound &&
-                state.round &&
-                !state.round.scored &&
-                state.round.token &&
-                (!next.round || next.round.token !== state.round.token)
-              ) {
-                schedulePush()
-                return
-              }
-              if ((spinning || banditSpinning) && !(next.round && next.round.scored)) return
+              // apply
               applyingRemote = true
-              state = next
+              state = decision.state
               saveLocal()
               applyRoundUiFromState()
               renderAll()
-              if (lastDest && !scoredThisRound && state.round && !state.round.scored) {
-                setupBandit(lastDest)
+              if (RoundSession.place && !RoundSession.localScored && state.round && !state.round.scored) {
+                setupBandit(RoundSession.place)
               }
               applyingRemote = false
               setSyncStatus('live')
@@ -1897,18 +2018,12 @@
           if (e.key === 'Enter') els.addPlayerBtn.click()
         })
         document.getElementById('doneBtn').addEventListener('click', function () {
-          if (placeHasChallenges(lastDest)) {
-            award(2, 'выполнил')
-          } else {
-            award(1, 'был там')
-          }
+          var o = Scoring.outcome(RoundSession.place, 'done')
+          award(o.points, o.note)
         })
         document.getElementById('failBtn').addEventListener('click', function () {
-          if (placeHasChallenges(lastDest)) {
-            award(0, 'слил')
-          } else {
-            award(0, 'мимо')
-          }
+          var o = Scoring.outcome(RoundSession.place, 'fail')
+          award(o.points, o.note)
         })
         els.editorToggle.addEventListener('click', function () {
           els.editor.classList.toggle('show')
@@ -1978,7 +2093,7 @@
             var removedId = d.id
             state.destinations.splice(di, 1)
             delete state.challenges[d.id]
-            if (lastDest && lastDest.id === removedId) abortRound(true)
+            if (RoundSession.place && RoundSession.place.id === removedId) abortRound(true)
             touch()
             return
           }
@@ -1998,6 +2113,37 @@
             refreshBanditIfCurrentPlace(d.id)
           }
         })
+
+        // Read-only test seam — additive; DOM copy stays the UX surface.
+        var Game = {
+          query: function () {
+            var buildEl = document.getElementById('buildTag')
+            var buildText = buildEl ? String(buildEl.textContent || '').trim() : ''
+            return {
+              build: buildText,
+              turnOwner: roundOwnerIndex(),
+              turnOwnerName: ownerName(roundOwnerIndex()),
+              roundOpen: roundIsOpen(),
+              scores: state.players.map(function (p) {
+                return { name: p.name, score: p.score }
+              }),
+              history: (state.history || []).slice(0, 20),
+              banditLocked: !!(
+                RoundSession.localScored ||
+                (state.round && state.round.scored)
+              ),
+              richness: RoomState.richness(state),
+              spinning: spinning,
+              banditSpinning: banditSpinning,
+            }
+          },
+          isSpinSettled: function () {
+            return !spinning && !banditSpinning && !els.spinBtn.disabled
+          },
+        }
+        try {
+          window.Malchishnik = { query: Game.query, isSpinSettled: Game.isSpinSettled }
+        } catch (e) {}
 
         renderAll()
         tryBootFromHash()

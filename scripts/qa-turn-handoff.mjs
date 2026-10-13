@@ -45,8 +45,9 @@ async function main() {
   await page.waitForTimeout(2500)
   const build = await page.locator('#buildTag').innerText().catch(() => '')
   console.log('build:', build)
-  if (!/build 5/.test(build)) {
-    console.log('FAIL | not build 5 yet')
+  const buildNum = Number((build.match(/build\s+(\d+)/i) || [])[1] || 0)
+  if (buildNum < 5) {
+    console.log('FAIL | need build >= 5, got', build)
     await browser.close()
     process.exit(1)
   }
