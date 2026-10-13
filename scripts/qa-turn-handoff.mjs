@@ -1,13 +1,15 @@
 import { chromium } from 'playwright'
+import {
+  chromePath,
+  ensurePlayers,
+  gameQuery,
+  resetGame,
+  roomUrl,
+  waitForGame,
+  waitSpinSettled,
+} from './qa-lib.mjs'
 
-const URL = process.env.QA_URL || 'https://zovminga.github.io/malchishnik-spin/'
-
-async function waitSpinIdle(page) {
-  await page.waitForFunction(() => {
-    const btn = document.getElementById('spinBtn')
-    return btn && !btn.disabled && /КРУТИТЬ/i.test(btn.textContent || '')
-  }, null, { timeout: 20000 })
-}
+const BASE = process.env.QA_URL || 'https://zovminga.github.io/malchishnik-spin/'
 
 async function scoreCurrent(page) {
   const banditBtn = page.locator('#banditBtn')
@@ -30,69 +32,61 @@ async function scoreCurrent(page) {
 
 async function main() {
   const browser = await chromium.launch({
-    headless: false,
-    executablePath: '/usr/bin/google-chrome-stable',
+    headless: true,
+    executablePath: chromePath(),
   })
   const page = await (
-    await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
+    await browser.newContext({
+      viewport: { width: 390, height: 844 },
+      isMobile: true,
+      hasTouch: true,
+    })
   ).newPage()
   page.on('dialog', (d) => d.accept())
 
-  const room = 'qa-handoff-' + Date.now()
-  const pageUrl = URL.split('?')[0] + '?room=' + room + '&t=' + Date.now()
+  const pageUrl = roomUrl(BASE, 'qa-handoff-' + Date.now())
   console.log('url', pageUrl)
   await page.goto(pageUrl, { waitUntil: 'domcontentloaded', timeout: 60000 })
-  await page.waitForTimeout(2500)
-  const build = await page.locator('#buildTag').innerText().catch(() => '')
-  console.log('build:', build)
-  const buildNum = Number((build.match(/build\s+(\d+)/i) || [])[1] || 0)
+  await waitForGame(page)
+  let q = await gameQuery(page)
+  console.log('build:', q.build)
+  const buildNum = Number((String(q.build).match(/build\s+(\d+)/i) || [])[1] || 0)
   if (buildNum < 5) {
-    console.log('FAIL | need build >= 5, got', build)
+    console.log('FAIL | need build >= 5, got', q.build)
     await browser.close()
     process.exit(1)
   }
 
-  await page.click('#resetGameBtn')
-  await page.waitForTimeout(600)
-  if ((await page.locator('.player-chip').count()) < 2) {
-    for (const n of ['Azat', 'Alexander']) {
-      await page.fill('#playerInput', n)
-      await page.click('#addPlayerBtn')
-      await page.waitForTimeout(250)
-    }
-  }
+  await resetGame(page)
+  await ensurePlayers(page)
   await page.locator('.player-chip', { hasText: /Azat/i }).first().click()
   await page.waitForTimeout(300)
 
-  // Spin 1 as Azat
   await page.click('#spinBtn')
-  await waitSpinIdle(page)
+  await waitSpinSettled(page)
   await page.waitForTimeout(500)
-  let turn = await page.locator('#turnLine').innerText()
-  console.log('spin1 turn:', turn)
+  q = await gameQuery(page)
+  console.log('spin1 owner:', q.turnOwnerName)
   await scoreCurrent(page)
-  turn = await page.locator('#turnLine').innerText()
-  const result = await page.locator('#result').innerText()
-  console.log('after score1 turn:', turn)
-  console.log('after score1 result:', result.replace(/\s+/g, ' '))
-  const handoffOk = /Alexander/i.test(turn) || /Alexander/i.test(result)
-  console.log(handoffOk ? 'PASS | handoff to Alexander visible' : 'FAIL | handoff not visible')
+  q = await gameQuery(page)
+  console.log('after score1 owner:', q.turnOwnerName)
+  const handoffOk = /Alexander/i.test(q.turnOwnerName || '')
+  console.log(handoffOk ? 'PASS | handoff to Alexander' : 'FAIL | handoff not visible', q.turnOwnerName)
 
-  // Spin 2 — must be Alexander's round
   await page.click('#spinBtn')
   await page.waitForTimeout(900)
-  turn = await page.locator('#turnLine').innerText()
-  console.log('spin2 turn:', turn)
-  const lockedAlexander = /Alexander/i.test(turn)
-  console.log(lockedAlexander ? 'PASS | second spin locked to Alexander' : 'FAIL | second spin not Alexander')
-  await waitSpinIdle(page)
-  await scoreCurrent(page)
-  const hist = await page.evaluate(() =>
-    Array.from(document.querySelectorAll('#historyList li')).map((li) => li.innerText.replace(/\s+/g, ' ')),
+  q = await gameQuery(page)
+  console.log('spin2 owner:', q.turnOwnerName)
+  const lockedAlexander = /Alexander/i.test(q.turnOwnerName || '')
+  console.log(
+    lockedAlexander ? 'PASS | second spin locked to Alexander' : 'FAIL | second spin not Alexander',
   )
-  console.log('hist0:', hist[0])
-  console.log('hist1:', hist[1])
-  const secondToAlexander = /Alexander/i.test(hist[0] || '')
+  await waitSpinSettled(page)
+  await scoreCurrent(page)
+  q = await gameQuery(page)
+  console.log('hist0:', q.history[0])
+  console.log('hist1:', q.history[1])
+  const secondToAlexander = /Alexander/i.test((q.history[0] && q.history[0].who) || '')
   console.log(secondToAlexander ? 'PASS | second score to Alexander' : 'FAIL | second score wrong person')
 
   await page.screenshot({ path: '/opt/cursor/artifacts/qa-turn-handoff.png', fullPage: true })

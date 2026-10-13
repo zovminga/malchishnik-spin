@@ -1,12 +1,11 @@
 /**
  * Feedback loop: "opened link on a new/phone browser → shared scores wiped".
  *
+ * Richness comes from window.Malchishnik.richness (RoomState) — not a cloned formula.
+ *
  * Usage:
  *   node scripts/repro-score-wipe.mjs
- *   BASE=http://127.0.0.1:8766 EXPECT=red node scripts/repro-score-wipe.mjs
- *   LOOPS=20 node scripts/repro-score-wipe.mjs
- *   MINIMAL=1 node scripts/repro-score-wipe.mjs   # scores only, no history
- *   FRESH_TS=1 node scripts/repro-score-wipe.mjs  # seed updatedAt=now (time-race off)
+ *   BASE=http://127.0.0.1:8765/ EXPECT=green LOOPS=3 node scripts/repro-score-wipe.mjs
  *
  * Exit 0 = expected verdict
  * Exit 1 = unexpected / scores wiped when EXPECT=green
@@ -14,6 +13,7 @@
  */
 import { chromium } from 'playwright'
 import fs from 'fs'
+import { chromePath, pageRichness, waitForGame, gameQuery } from './qa-lib.mjs'
 
 const DB = 'https://malchishnikspin-default-rtdb.firebaseio.com'
 const BASE = (process.env.BASE || 'https://zovminga.github.io/malchishnik-spin/').replace(/\/?$/, '/')
@@ -21,17 +21,7 @@ const EXPECT = (process.env.EXPECT || 'green').toLowerCase()
 const LOOPS = Math.max(1, Number(process.env.LOOPS) || 1)
 const MINIMAL = process.env.MINIMAL === '1'
 const FRESH_TS = process.env.FRESH_TS === '1'
-const CHROME =
-  process.env.CHROME ||
-  (fs.existsSync('/usr/bin/google-chrome-stable')
-    ? '/usr/bin/google-chrome-stable'
-    : '/usr/local/bin/google-chrome')
-
-function richness(s) {
-  if (!s) return 0
-  const scoreSum = (s.players || []).reduce((a, p) => a + (Number(p.score) || 0), 0)
-  return (s.history || []).length * 100 + (s.players || []).length * 10 + scoreSum
-}
+const CHROME = chromePath()
 
 function seedState() {
   const base = {
@@ -90,25 +80,28 @@ async function oneJoin(browser, room, stateUrl) {
 
   const url = `${BASE}index.html?room=${room}&t=${Date.now()}`
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 })
-  await page.waitForTimeout(4500)
+  await waitForGame(page)
+  await page.waitForTimeout(3500)
 
-  const build = await page.locator('#buildTag').innerText().catch(() => '?')
+  const q = await gameQuery(page)
   const after = await getState(stateUrl)
+  const rBefore = await pageRichness(page, before)
+  const rAfter = await pageRichness(page, after)
   const azat = ((after && after.players) || []).find((p) => p.name === 'Azat')
   const azatScore = azat ? azat.score : undefined
   const wiped =
-    richness(after) < richness(before) &&
+    rAfter < rBefore &&
     (!(after && after.players) || !after.players.some((p) => p.name === 'Azat' && p.score === 5))
 
   await context.close()
   await fetch(stateUrl, { method: 'DELETE' }).catch(() => {})
 
   return {
-    build,
+    build: q.build,
     wiped: wiped || azatScore !== 5,
     azatScore,
-    rBefore: richness(before),
-    rAfter: richness(after),
+    rBefore,
+    rAfter,
     scores: ((after && after.players) || []).map((p) => `${p.name}:${p.score}`).join(', '),
   }
 }

@@ -1,69 +1,66 @@
 import { chromium } from 'playwright'
 import fs from 'fs'
+import {
+  chromePath,
+  ensurePlayers,
+  gameQuery,
+  resetGame,
+  roomUrl,
+  waitForGame,
+  waitSpinSettled,
+} from './qa-lib.mjs'
 
-const URL = process.env.QA_URL || 'https://zovminga.github.io/malchishnik-spin/'
-const OUT = '/opt/cursor/artifacts/qa'
+const BASE = process.env.QA_URL || 'https://zovminga.github.io/malchishnik-spin/'
+const OUT = process.env.QA_OUT || '/opt/cursor/artifacts/qa'
 fs.mkdirSync(OUT, { recursive: true })
-
-async function waitSpinIdle(page) {
-  await page.waitForFunction(() => {
-    const btn = document.getElementById('spinBtn')
-    return btn && !btn.disabled && /КРУТИТЬ МЕСТО/i.test(btn.textContent || '')
-  }, null, { timeout: 20000 })
-}
 
 async function main() {
   const browser = await chromium.launch({
-    headless: false,
-    executablePath: '/usr/bin/google-chrome-stable',
+    headless: true,
+    executablePath: chromePath(),
     args: ['--disable-dev-shm-usage'],
   })
-  const page = await (await browser.newContext({
-    viewport: { width: 390, height: 844 },
-    isMobile: true,
-    hasTouch: true,
-  })).newPage()
+  const page = await (
+    await browser.newContext({
+      viewport: { width: 390, height: 844 },
+      isMobile: true,
+      hasTouch: true,
+    })
+  ).newPage()
   page.on('dialog', (d) => d.accept())
 
-  // bust cache
-  await page.goto(URL + '?t=' + Date.now(), { waitUntil: 'domcontentloaded', timeout: 60000 })
-  await page.waitForTimeout(2500)
-  const hasRound = await page.evaluate(() => /roundIsOpen|Раунд:/.test(document.documentElement.innerHTML))
-  console.log(hasRound ? 'PASS | new build' : 'FAIL | old build')
-  if (!hasRound) {
+  const url = roomUrl(BASE, 'qa-round-owner-' + Date.now())
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 })
+  await waitForGame(page)
+  let q = await gameQuery(page)
+  const buildOk = /build\s+\d+/i.test(q.build || '')
+  console.log(buildOk ? 'PASS | new build' : 'FAIL | old build', q.build)
+  if (!buildOk) {
     await browser.close()
     process.exit(1)
   }
 
-  await page.click('#resetGameBtn')
-  await page.waitForTimeout(800)
+  await resetGame(page)
+  await ensurePlayers(page)
 
-  let chips = await page.locator('.player-chip').count()
-  if (chips < 2) {
-    for (const n of ['Azat', 'Alexander']) {
-      await page.fill('#playerInput', n)
-      await page.click('#addPlayerBtn')
-      await page.waitForTimeout(300)
-    }
-  }
-
-  // Make Alexander active, start spin, try to click Azat mid-spin (old bug)
+  // Make Alexander active, start spin, try to click Azat mid-spin
   await page.locator('.player-chip', { hasText: /Alexander/i }).first().click()
   await page.waitForTimeout(400)
-  let turn = await page.locator('#turnLine').innerText()
-  console.log('before spin:', turn)
+  q = await gameQuery(page)
+  console.log('before spin: owner=', q.turnOwnerName)
 
   await page.click('#spinBtn')
   await page.waitForTimeout(800)
-  // try steal to Azat during spin
   await page.locator('.player-chip', { hasText: /Azat/i }).first().click()
   await page.waitForTimeout(400)
-  turn = await page.locator('#turnLine').innerText()
-  console.log('during spin:', turn)
-  const lockedToAlexander = /Alexander/i.test(turn)
-  console.log(lockedToAlexander ? 'PASS | owner locked during spin' : 'FAIL | owner changed during spin')
+  q = await gameQuery(page)
+  const lockedToAlexander = /Alexander/i.test(q.turnOwnerName || '')
+  console.log(
+    lockedToAlexander ? 'PASS | owner locked during spin' : 'FAIL | owner changed during spin',
+    q.turnOwnerName,
+  )
 
-  await waitSpinIdle(page)
+  await waitSpinSettled(page)
   await page.waitForTimeout(600)
 
   const banditBtn = page.locator('#banditBtn')
@@ -76,11 +73,10 @@ async function main() {
   }
   await page.waitForTimeout(1000)
 
-  const hist = await page.evaluate(() =>
-    (document.querySelector('#historyList li') || {}).innerText || '',
-  )
-  console.log('hist:', hist.replace(/\s+/g, ' '))
-  const ok = /Alexander/i.test(hist)
+  q = await gameQuery(page)
+  const hist0 = q.history[0] || {}
+  console.log('hist:', hist0.who, hist0.note)
+  const ok = /Alexander/i.test(hist0.who || '')
   console.log(ok ? 'PASS | points to Alexander (spin owner)' : 'FAIL | points not to Alexander')
 
   await page.screenshot({ path: OUT + '/round-owner.png', fullPage: true })
