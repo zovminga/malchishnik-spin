@@ -1,34 +1,24 @@
 import { chromium } from 'playwright'
 import fs from 'fs'
 import path from 'path'
+import {
+  chromePath,
+  ensurePlayers,
+  gameQuery,
+  resetGame,
+  roomUrl,
+  waitForGame,
+  waitSpinSettled,
+} from './qa-lib.mjs'
 
-const URL = process.env.QA_URL || 'https://zovminga.github.io/malchishnik-spin/'
+const BASE = process.env.QA_URL || 'https://zovminga.github.io/malchishnik-spin/'
 const OUT = process.env.QA_OUT || '/opt/cursor/artifacts/qa'
 fs.mkdirSync(OUT, { recursive: true })
 
-async function waitSpinIdle(page) {
-  await page.waitForFunction(() => {
-    const btn = document.getElementById('spinBtn')
-    return btn && !btn.disabled && /КРУТИТЬ МЕСТО/i.test(btn.textContent || '')
-  }, null, { timeout: 20000 })
-}
-
-async function scores(page) {
-  return page.evaluate(() =>
-    Array.from(document.querySelectorAll('.player-chip')).map((el) => el.textContent.trim()),
-  )
-}
-
-async function history(page) {
-  return page.evaluate(() =>
-    Array.from(document.querySelectorAll('#historyList li')).map((li) => li.innerText.replace(/\s+/g, ' ')),
-  )
-}
-
 async function main() {
   const browser = await chromium.launch({
-    headless: false,
-    executablePath: '/usr/bin/google-chrome-stable',
+    headless: true,
+    executablePath: chromePath(),
     args: ['--disable-dev-shm-usage', '--window-size=420,900'],
   })
   const context = await browser.newContext({
@@ -41,20 +31,13 @@ async function main() {
   const page = await context.newPage()
   page.on('dialog', async (d) => d.accept())
 
-  await page.goto(URL, { waitUntil: 'domcontentloaded', timeout: 60000 })
-  await page.waitForTimeout(2000)
-  await page.click('#resetGameBtn')
-  await page.waitForTimeout(600)
-
-  // Ensure Azat / Alexander
-  let chips = await scores(page)
-  if (chips.length < 2) {
-    for (const name of ['Azat', 'Alexander']) {
-      await page.fill('#playerInput', name)
-      await page.click('#addPlayerBtn')
-      await page.waitForTimeout(300)
-    }
-  }
+  await page.goto(roomUrl(BASE, 'qa-scoring-' + Date.now()), {
+    waitUntil: 'domcontentloaded',
+    timeout: 60000,
+  })
+  await waitForGame(page)
+  await resetGame(page)
+  await ensurePlayers(page)
   await page.locator('.player-chip', { hasText: /Azat/i }).first().click()
   await page.waitForTimeout(400)
 
@@ -64,7 +47,7 @@ async function main() {
 
   for (let attempt = 1; attempt <= 12; attempt++) {
     await page.click('#spinBtn')
-    await waitSpinIdle(page)
+    await waitSpinSettled(page)
     await page.waitForTimeout(600)
     place = await page.locator('.result-label').innerText()
     const banditBtn = page.locator('#banditBtn')
@@ -91,33 +74,43 @@ async function main() {
     process.exit(1)
   }
 
-  const before = await scores(page)
-  console.log('BEFORE', before.join(' | '), 'place=', place, 'challenge=', challenge)
+  let q = await gameQuery(page)
+  console.log(
+    'BEFORE',
+    q.scores.map((p) => `${p.name} ${p.score}`).join(' | '),
+    'place=',
+    place,
+    'challenge=',
+    challenge,
+  )
   await page.screenshot({ path: path.join(OUT, 'challenge-before-score.png'), fullPage: true })
 
   await page.click('#doneBtn')
   await page.waitForTimeout(1200)
 
-  const after = await scores(page)
-  const hist = await history(page)
-  const banditText = await page.locator('#banditBtn').innerText()
-  const turn = await page.locator('#turnLine').innerText()
-
-  console.log('AFTER', after.join(' | '))
-  console.log('HIST0', hist[0])
-  console.log('BANDIT', banditText)
-  console.log('TURN', turn)
+  q = await gameQuery(page)
+  const hist0 = q.history[0] || {}
+  console.log(
+    'AFTER',
+    q.scores.map((p) => `${p.name} ${p.score}`).join(' | '),
+  )
+  console.log('HIST0', hist0.who, hist0.note, hist0.challenge)
+  console.log('BANDIT_LOCKED', q.banditLocked)
+  console.log('TURN', q.turnOwnerName)
 
   const passAzat =
-    /Azat/i.test(hist[0] || '') &&
-    /выполнил \(\+2\)/.test(hist[0] || '') &&
-    !/Alexander/i.test(hist[0] || '')
-  const passLock = /ОЧКИ ЗАСЧИТАНЫ/i.test(banditText)
-  const passTurn = /Alexander/i.test(turn)
+    /Azat/i.test(hist0.who || '') &&
+    /\+2/.test(hist0.note || '') &&
+    /выполнил/.test(hist0.note || '') &&
+    !/Alexander/i.test(hist0.who || '')
+  const passLock = !!q.banditLocked
+  const passTurn = /Alexander/i.test(q.turnOwnerName || '')
+  const detailLock = String(q.banditLocked)
+  const detailTurn = q.turnOwnerName
+  const detailHist0 = `${hist0.who} ${hist0.note}`
 
-  // Second round for Alexander with forced challenge if possible
   await page.click('#spinBtn')
-  await waitSpinIdle(page)
+  await waitSpinSettled(page)
   await page.waitForTimeout(500)
   const banditBtn2 = page.locator('#banditBtn')
   if (!(await banditBtn2.evaluate((el) => el.hidden))) {
@@ -130,18 +123,20 @@ async function main() {
     await page.waitForTimeout(1000)
   }
 
-  const hist2 = await history(page)
-  const after2 = await scores(page)
-  console.log('AFTER2', after2.join(' | '))
-  console.log('HIST1', hist2[0])
+  q = await gameQuery(page)
+  console.log(
+    'AFTER2',
+    q.scores.map((p) => `${p.name} ${p.score}`).join(' | '),
+  )
+  console.log('HIST1', (q.history[0] || {}).who, (q.history[0] || {}).note)
 
   await page.screenshot({ path: path.join(OUT, 'challenge-after-two-rounds.png'), fullPage: true })
 
   const results = [
-    ['Challenge place scored +2 to Azat', passAzat, hist[0]],
-    ['Bandit locked after score', passLock, banditText],
-    ['Turn -> Alexander', passTurn, turn],
-    ['Second log entry exists', hist2.length >= 2, String(hist2.length)],
+    ['Challenge place scored +2 to Azat', passAzat, detailHist0],
+    ['Bandit locked after score', passLock, detailLock],
+    ['Turn -> Alexander', passTurn, detailTurn],
+    ['Second log entry exists', q.history.length >= 2, String(q.history.length)],
   ]
 
   let failed = 0

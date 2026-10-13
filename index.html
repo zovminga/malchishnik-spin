@@ -743,7 +743,7 @@
       <footer class="footer">
         <p>Одна ссылка — одна игра на всех.</p>
         <div class="footer-tools">
-          <span id="buildTag">build 13</span>
+          <span id="buildTag">build 14</span>
           <button type="button" id="hardResetBtn">сброс кэша</button>
         </div>
       </footer>
@@ -2130,7 +2130,8 @@
               history: (state.history || []).slice(0, 20),
               banditLocked: !!(
                 RoundSession.localScored ||
-                (state.round && state.round.scored)
+                (state.round && state.round.scored) ||
+                /ОЧКИ ЗАСЧИТАНЫ/i.test((els.banditBtn && els.banditBtn.textContent) || '')
               ),
               richness: RoomState.richness(state),
               spinning: spinning,
@@ -2142,7 +2143,12 @@
           },
         }
         try {
-          window.Malchishnik = { query: Game.query, isSpinSettled: Game.isSpinSettled }
+          // QA seam: scripts assert via query/richness, not Russian DOM copy.
+          window.Malchishnik = {
+            query: Game.query,
+            isSpinSettled: Game.isSpinSettled,
+            richness: RoomState.richness,
+          }
         } catch (e) {}
 
         renderAll()
