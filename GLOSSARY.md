@@ -33,9 +33,21 @@ Someone on the Room roster with a display name and a running score. Adding and r
 _Avoid_: Participant, member, guest (for the roster seat), участник (UI may say «игроки»)
 
 **Night Progress**:
-How “full” a Room already is: entries in the night log, Players on the list, and total scores. A fuller Room beats a emptier one when phones disagree — so a fresh phone with almost nothing does not wipe the party. Removing a Player can thin Night Progress, so another phone’s fuller copy may put them back.
+How “full” a Room already is: entries in the night log, Players on the list, and total scores. When Room Generation matches, a fuller Room beats a emptier one — so a fresh phone with almost nothing does not wipe the party. Removing a Player can thin Night Progress, so another phone’s fuller copy may put them back.
 _Avoid_: Richness (code name), freshness, latest write, «кто последний сохранил»
+
+**Room Generation**:
+A monotonic version on the Room that rises only on Score Clear or Game Restart. A higher Room Generation beats a lower one even when Night Progress is thinner; equal Room Generation falls back to Night Progress.
+_Avoid_: Reset token, epoch, wipe counter, sync version (unless speaking about code)
 
 **Groom Salute**:
 A short burst of groom-themed mini pictures (football, ginger-and-white cat Zvyrk, Jesus face) that flies like confetti when the wheel hits JACKPOT — not during the whole spin. Everyone currently in the Room who is watching sees it.
 _Avoid_: Confetti (unless speaking casually), FX sparks (the old colored dots)
+
+**Score Clear**:
+An intentional Room action that zeroes every Player's score, clears the night log, and aborts any open Round, while keeping the Player list and Places/Challenges. Unlike a thinner accidental join, a Score Clear must stick for everyone in the Room.
+_Avoid_: Soft reset, «Обнулить игру» (old single button), wipe (for accidental empty-phone joins)
+
+**Game Restart**:
+An intentional Room action that does a Score Clear and also removes every Player from the Room, while keeping Places/Challenges.
+_Avoid_: Hard reset (removed cache button), full wipe, «перезапуск» without saying Players leave
