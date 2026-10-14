@@ -4,7 +4,7 @@
 
 **Blocked by:** 01: Score Clear sticks across devices via Room Generation
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] Game Restart clears scores, night log, open Round, and the Player list; bumps Room Generation; keeps Places/Challenges
 - [ ] Peer B sees an empty Player list live after Game Restart on A; refresh on A and B still empty of Players
