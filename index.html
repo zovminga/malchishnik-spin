@@ -1718,6 +1718,16 @@
             if (next.updatedAt === local.updatedAt && next.updatedBy === local.updatedBy) {
               return { action: 'ignore' }
             }
+            // The Room moved past this phone (it missed an award while offline / asleep):
+            // a defend push would be rejected by shouldWrite anyway and leave this phone
+            // stuck on a stale open Round, so adopt the fuller Room instead.
+            if (
+              !ctx.spinning &&
+              !ctx.banditSpinning &&
+              RoomState.richness(next) > RoomState.richness(local)
+            ) {
+              return { action: 'apply', state: next }
+            }
             // Defend this phone's open Round against wipe / empty join (ADR-0003).
             // Do not defend against a missing round here when Night Progress is richer —
             // award path keeps scored=true on the wire so peers apply via the branch above.
