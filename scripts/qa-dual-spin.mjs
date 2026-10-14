@@ -153,9 +153,13 @@ async function main() {
   )
 
   // --- Late non-owner spin must not create / replace the open Round ---
-  await pageB.click('#spinBtn')
+  // Spin is disabled while a Round is open (control polish); still probe a force-click.
+  qB = await gameQuery(pageB)
+  const lateSpinBlocked =
+    qB.spinAvailable === false && (await pageB.locator('#spinBtn').isDisabled())
+  await pageB.click('#spinBtn', { force: true }).catch(() => {})
   await pageB.waitForTimeout(1000)
-  await pageB.click('#spinBtn').catch(() => {})
+  await pageB.click('#spinBtn', { force: true }).catch(() => {})
   await pageB.waitForTimeout(2000)
   await waitSpinSettled(pageB, 25000).catch(() => {})
 
@@ -163,6 +167,7 @@ async function main() {
   qA = await gameQuery(pageA)
   qB = await gameQuery(pageB)
   const lateOk =
+    lateSpinBlocked &&
     qA.roundOpen &&
     qB.roundOpen &&
     qA.turnOwnerName === raceOwner &&
@@ -171,6 +176,7 @@ async function main() {
     roundLate.token === raceToken
   console.log(
     lateOk ? 'PASS | late spin does not replace open Round' : 'FAIL | late spin replaced Round',
+    `blocked=${lateSpinBlocked}`,
     qA.turnOwnerName,
     qB.turnOwnerName,
     roundLate && roundLate.token,
