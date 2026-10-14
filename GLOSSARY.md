@@ -31,3 +31,7 @@ _Avoid_: Round Owner, «кому очки», activePlayer (code name)
 **Night Progress**:
 How “full” a Room already is: entries in the night log, players on the list, and total scores. A fuller Room beats a emptier one when phones disagree — so a fresh phone with almost nothing does not wipe the party.
 _Avoid_: Richness (code name), freshness, latest write, «кто последний сохранил»
+
+**Groom Salute**:
+A short burst of groom-themed mini pictures (football, cat Zvyrk, Jesus) that flies like confetti when the wheel hits JACKPOT — not during the whole spin.
+_Avoid_: Confetti (unless speaking casually), FX sparks (the old colored dots)
