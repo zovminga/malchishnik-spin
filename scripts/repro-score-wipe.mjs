@@ -16,7 +16,7 @@ import fs from 'fs'
 import { chromePath, pageRichness, waitForGame, gameQuery } from './qa-lib.mjs'
 
 const DB = 'https://malchishnikspin-default-rtdb.firebaseio.com'
-const BASE = (process.env.BASE || 'https://zovminga.github.io/malchishnik-spin/').replace(/\/?$/, '/')
+const BASE = (process.env.BASE || process.env.QA_URL || 'https://zovminga.github.io/malchishnik-spin/').replace(/\/?$/, '/')
 const EXPECT = (process.env.EXPECT || 'green').toLowerCase()
 const LOOPS = Math.max(1, Number(process.env.LOOPS) || 1)
 const MINIMAL = process.env.MINIMAL === '1'
