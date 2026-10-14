@@ -4,7 +4,7 @@
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] Room Generation is part of Room state; missing/legacy values normalize to the lowest safe baseline
 - [ ] Score Clear zeroes scores, clears the night log, aborts any open Round, keeps Players and Places/Challenges, bumps Room Generation, and pushes immediately
