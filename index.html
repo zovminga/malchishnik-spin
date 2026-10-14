@@ -905,7 +905,7 @@
           <button type="button" id="gameRestartBtn">Перезапустить игру</button>
         </div>
         <div class="footer-tools">
-          <span id="buildTag">build 27</span>
+          <span id="buildTag">build 28</span>
         </div>
       </footer>
     </div>
@@ -1085,6 +1085,8 @@
         var pushTimer = null
         var paintTimer = null
         var paintSkipEditor = true
+        // Editor kept a focused Place block during a re-render; refresh it after blur.
+        var editorKeptStale = false
         var dbRef = null
         var dbUnsub = null
         // Connection to the Room: Firebase .info/connected plus the browser online flag.
@@ -2120,64 +2122,93 @@
             .join('')
         }
 
+        // One Place block of the editor.
+        function placeBlockHtml(d, di) {
+          var list = state.challenges[d.id] || []
+          var html =
+            '<div class="place-block" data-di="' +
+            di +
+            '" data-id="' +
+            esc(d.id) +
+            '">' +
+            '<div class="place-meta">' +
+            '<input data-field="label" value="' +
+            esc(d.label) +
+            '" maxlength="16" placeholder="Название места" style="border-color:' +
+            d.color +
+            '" />' +
+            '<button type="button" class="mini danger" data-del-place>Удалить</button>' +
+            '</div>'
+          if (!list.length) html += '<p class="empty-chal">Заданий нет — только место</p>'
+          list.forEach(function (t, j) {
+            html +=
+              '<div class="chal-row"><span>' +
+              esc(t) +
+              '</span><button type="button" data-del-chal="' +
+              j +
+              '">✕</button></div>'
+          })
+          return (
+            html +
+            '<div class="add-row"><input data-add-input maxlength="80" placeholder="Новое задание…" /><button type="button" data-add-chal>Добавить</button></div></div>'
+          )
+        }
+
+        // Re-render the editor without touching the Place block that holds focus, so its
+        // input keeps the half-typed text, caret and phone keyboard while peers write.
+        // Half-typed Challenges in other blocks are carried over by Place id.
         function renderEditor() {
           var active = document.activeElement
-          var restore = null
-          if (active && els.editorList.contains(active) && active.getAttribute) {
-            var block = active.closest('.place-block')
-            restore = {
-              di: block ? block.getAttribute('data-di') : null,
-              field: active.getAttribute('data-field'),
-              addInput: active.getAttribute('data-add-input') != null,
-              start: typeof active.selectionStart === 'number' ? active.selectionStart : null,
-              end: typeof active.selectionEnd === 'number' ? active.selectionEnd : null,
+          var keep =
+            active && els.editorList.contains(active) && /^(INPUT|TEXTAREA)$/.test(active.tagName)
+              ? active.closest('.place-block')
+              : null
+          var drafts = {}
+          Array.prototype.forEach.call(els.editorList.querySelectorAll('.place-block'), function (block) {
+            var input = block.querySelector('[data-add-input]')
+            if (input && input.value) drafts[block.getAttribute('data-id')] = input.value
+          })
+          var keepIdx = -1
+          if (keep) {
+            for (var i = 0; i < state.destinations.length; i++) {
+              if (state.destinations[i].id === keep.getAttribute('data-id')) keepIdx = i
             }
           }
-          var html = ''
-          state.destinations.forEach(function (d, di) {
-            var list = state.challenges[d.id] || []
-            html +=
-              '<div class="place-block" data-di="' +
-              di +
-              '" data-id="' +
-              esc(d.id) +
-              '">' +
-              '<div class="place-meta">' +
-              '<input data-field="label" value="' +
-              esc(d.label) +
-              '" maxlength="16" placeholder="Название места" style="border-color:' +
-              d.color +
-              '" />' +
-              '<button type="button" class="mini danger" data-del-place>Удалить</button>' +
-              '</div>'
-            if (!list.length) html += '<p class="empty-chal">Заданий нет — только место</p>'
-            list.forEach(function (t, j) {
-              html +=
-                '<div class="chal-row"><span>' +
-                esc(t) +
-                '</span><button type="button" data-del-chal="' +
-                j +
-                '">✕</button></div>'
+          if (keepIdx === -1) {
+            // Nothing focused, or the focused Place was deleted on another phone.
+            els.editorList.innerHTML =
+              state.destinations.map(placeBlockHtml).join('') ||
+              '<p class="empty-chal">Мест нет — добавь хотя бы одно</p>'
+            editorKeptStale = false
+          } else {
+            Array.prototype.slice.call(els.editorList.childNodes).forEach(function (node) {
+              if (node !== keep) els.editorList.removeChild(node)
             })
-            html +=
-              '<div class="add-row"><input data-add-input maxlength="80" placeholder="Новое задание…" /><button type="button" data-add-chal>Добавить</button></div></div>'
-          })
-          els.editorList.innerHTML = html || '<p class="empty-chal">Мест нет — добавь хотя бы одно</p>'
-          if (!restore || restore.di == null) return
-          var again = els.editorList.querySelector('.place-block[data-di="' + restore.di + '"]')
-          if (!again) return
-          var focusEl = restore.addInput
-            ? again.querySelector('[data-add-input]')
-            : restore.field
-              ? again.querySelector('[data-field="' + restore.field + '"]')
-              : null
-          if (!focusEl) return
-          focusEl.focus()
-          if (restore.start != null && typeof focusEl.setSelectionRange === 'function') {
-            try {
-              focusEl.setSelectionRange(restore.start, restore.end != null ? restore.end : restore.start)
-            } catch (e) {}
+            keep.setAttribute('data-di', String(keepIdx))
+            var tmp = document.createElement('div')
+            state.destinations.forEach(function (d, di) {
+              if (di === keepIdx) return
+              tmp.innerHTML = placeBlockHtml(d, di)
+              if (di < keepIdx) els.editorList.insertBefore(tmp.firstChild, keep)
+              else els.editorList.appendChild(tmp.firstChild)
+            })
+            // The kept block may lag (e.g. a peer's Challenge on the same Place) until blur.
+            editorKeptStale = true
           }
+          Array.prototype.forEach.call(els.editorList.querySelectorAll('.place-block'), function (block) {
+            var input = block.querySelector('[data-add-input]')
+            var draft = drafts[block.getAttribute('data-id')]
+            if (block !== keep && input && draft) input.value = draft
+          })
+        }
+
+        // Editor Place index by the block's Place id (indexes shift when peers add Places).
+        function placeIndexOfBlock(block) {
+          var id = block.getAttribute('data-id')
+          for (var i = 0; i < state.destinations.length; i++) {
+            if (state.destinations[i].id === id) return i
+          }
+          return -1
         }
 
         function renderAll(opts) {
@@ -2948,8 +2979,7 @@
           var t = e.target
           var block = t.closest('.place-block')
           if (!block) return
-          var di = parseInt(block.getAttribute('data-di'), 10)
-          var d = state.destinations[di]
+          var d = state.destinations[placeIndexOfBlock(block)]
           if (!d) return
           var field = t.getAttribute('data-field')
           if (field === 'label' && roomWriteBlocked()) {
@@ -2965,12 +2995,22 @@
           }
         })
 
+        // Bring a kept (possibly lagging) Place block up to date once editing ends.
+        els.editorList.addEventListener('focusout', function () {
+          if (!editorKeptStale) return
+          setTimeout(function () {
+            var active = document.activeElement
+            if (active && els.editorList.contains(active) && /^(INPUT|TEXTAREA)$/.test(active.tagName)) return
+            if (editorKeptStale) renderEditor()
+          }, 300)
+        })
+
         els.editorList.addEventListener('click', function (e) {
           var t = e.target
           if (!t.getAttribute) return
           var block = t.closest('.place-block')
           if (!block) return
-          var di = parseInt(block.getAttribute('data-di'), 10)
+          var di = placeIndexOfBlock(block)
           var d = state.destinations[di]
           if (!d) return
           if (t.closest('button') && roomWriteBlocked()) return
@@ -2990,6 +3030,13 @@
           }
           if (t.getAttribute('data-del-chal') != null) {
             var idx = parseInt(t.getAttribute('data-del-chal'), 10)
+            // A lagging block may show an older list: delete by the text the row shows.
+            var shown = t.parentNode.querySelector('span')
+            var text = shown ? shown.textContent : null
+            if (text != null && state.challenges[d.id][idx] !== text) {
+              idx = state.challenges[d.id].indexOf(text)
+            }
+            if (idx < 0) return
             state.challenges[d.id].splice(idx, 1)
             touch()
             refreshBanditIfCurrentPlace(d.id)

@@ -150,6 +150,27 @@ async function typingSurvivesPeerWrites(browser) {
     .then(() => true)
     .catch(() => false)
   log('[label] label commits on blur and reaches the peer', renamed)
+
+  // Peer adds a Challenge to the Place A is editing: A's block catches up after blur.
+  const keptAdd = A.page.locator(`#editorList .place-block[data-id="${targetId}"] [data-add-input]`)
+  await keptAdd.click()
+  const peerBlock = B.page.locator(`#editorList .place-block[data-id="${targetId}"]`)
+  await peerBlock.locator('[data-add-input]').fill('От соседа')
+  await peerBlock.locator('[data-add-chal]').click({ force: true })
+  await A.page.waitForTimeout(1500)
+  await A.page.locator('#playerInput').click()
+  const caughtUp = await A.page
+    .waitForFunction(
+      (id) => {
+        const block = document.querySelector(`#editorList .place-block[data-id="${id}"]`)
+        return !!block && /От соседа/.test(block.textContent || '')
+      },
+      targetId,
+      { timeout: SYNC_MS },
+    )
+    .then(() => true)
+    .catch(() => false)
+  log('[kept] edited Place block shows a peer Challenge after blur', caughtUp)
   await A.context.close()
   await B.context.close()
 }
