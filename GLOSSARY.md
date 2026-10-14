@@ -33,5 +33,5 @@ How “full” a Room already is: entries in the night log, players on the list,
 _Avoid_: Richness (code name), freshness, latest write, «кто последний сохранил»
 
 **Groom Salute**:
-A short burst of groom-themed mini pictures (football, cat Zvyrk, Jesus) that flies like confetti when the wheel hits JACKPOT — not during the whole spin.
+A short burst of groom-themed mini pictures (football, ginger-and-white cat Zvyrk, Jesus face) that flies like confetti when the wheel hits JACKPOT — not during the whole spin. Everyone currently in the Room who is watching sees it.
 _Avoid_: Confetti (unless speaking casually), FX sparks (the old colored dots)
