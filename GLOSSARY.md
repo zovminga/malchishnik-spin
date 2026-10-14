@@ -29,5 +29,5 @@ Whose turn it is to spin when there is no open Round. Not the same idea as Round
 _Avoid_: Round Owner, «кому очки», activePlayer (code name)
 
 **Night Progress**:
-How far a Room has gotten — history, players, and scores. When two versions of a Room conflict, the one with more Night Progress wins.
-_Avoid_: Richness (code name), freshness, latest write
+How “full” a Room already is: entries in the night log, players on the list, and total scores. A fuller Room beats a emptier one when phones disagree — so a fresh phone with almost nothing does not wipe the party.
+_Avoid_: Richness (code name), freshness, latest write, «кто последний сохранил»
