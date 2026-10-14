@@ -919,6 +919,9 @@
         var groomSaluteActive = false
         var groomSaluteFires = 0
         var groomSaluteTimer = null
+        // Dedup local + peer salute for the same Round landing (token|placeId).
+        // No separate RTDB salute doc — drive off shared Round placeId / spin-settle.
+        var salutedLandingKey = null
         // -------------------------------------------------------------------------
         // Seam: RoundSession — local guards for the open Round (ADR-0003).
         // Wire shape stays on state.round; localOwner / localScored keep mid-sync
@@ -1855,6 +1858,58 @@
           }, GROOM_SALUTE_MS)
         }
 
+        function landingSaluteKey(round) {
+          if (!round || !round.token || !round.placeId) return null
+          return String(round.token) + '|' + String(round.placeId)
+        }
+
+        function paintPlaceResult(dest) {
+          els.result.innerHTML =
+            '<p class="result-kicker">★★ МЕСТО ★★</p><p class="result-label" style="color:' +
+            dest.color +
+            '">' +
+            esc(dest.label) +
+            '</p><p class="result-tagline">' +
+            esc(dest.tagline) +
+            '</p>'
+        }
+
+        function flashJackpotBanner() {
+          els.page.classList.remove('flash')
+          void els.page.offsetWidth
+          els.page.classList.add('flash')
+        }
+
+        // JACKPOT / spin-settle celebration shared by spinner and watching peers.
+        function celebrateJackpotLanding(dest) {
+          if (!dest) return
+          paintPlaceResult(dest)
+          flashJackpotBanner()
+          groomSalute()
+        }
+
+        // Peer path: shared Round gained placeId — salute once per landing key.
+        function maybeSaluteSharedLanding() {
+          var key = landingSaluteKey(state.round)
+          if (!key || key === salutedLandingKey) return
+          if (state.round && state.round.scored) {
+            salutedLandingKey = key
+            return
+          }
+          var dest = RoundSession.place
+          if (!dest && state.round && state.round.placeId) {
+            for (var i = 0; i < state.destinations.length; i++) {
+              if (state.destinations[i].id === state.round.placeId) {
+                dest = state.destinations[i]
+                break
+              }
+            }
+          }
+          if (!dest) return
+          salutedLandingKey = key
+          celebrateJackpotLanding(dest)
+        }
+
         // Mirror shared Round onto RoundSession local guards (Round Owner, Place, Challenge).
         function applyRoundUiFromState() {
           if (!state.round) {
@@ -1928,19 +1983,6 @@
         }
 
         function showPlace(dest) {
-          els.result.innerHTML =
-            '<p class="result-kicker">★★ МЕСТО ★★</p><p class="result-label" style="color:' +
-            dest.color +
-            '">' +
-            esc(dest.label) +
-            '</p><p class="result-tagline">' +
-            esc(dest.tagline) +
-            '</p>'
-          els.page.classList.remove('flash')
-          void els.page.offsetWidth
-          els.page.classList.add('flash')
-          // JACKPOT: sticker Groom Salute is the main confetti (no full spark stack).
-          groomSalute()
           if (state.round) {
             state.round.placeId = dest.id
             state.round.placeLabel = dest.label
@@ -1948,6 +1990,10 @@
             state.round.challenge = null
             state.round.scored = false
           }
+          // Mark landing before salute so the RTDB echo does not fire a second burst.
+          salutedLandingKey = landingSaluteKey(state.round)
+          // JACKPOT: sticker Groom Salute is the main confetti (no full spark stack).
+          celebrateJackpotLanding(dest)
           setupBandit(dest)
           touch({ immediate: true })
         }
@@ -2114,6 +2160,8 @@
                   state = RoomState.normalize(remote)
                   saveLocal()
                   applyRoundUiFromState()
+                  // Late join: suppress salute for a Place already on the wire.
+                  salutedLandingKey = landingSaluteKey(state.round)
                   if (paintTimer != null) {
                     cancelAnimationFrame(paintTimer)
                     paintTimer = null
@@ -2166,6 +2214,8 @@
               if (RoundSession.place && !RoundSession.localScored && state.round && !state.round.scored) {
                 setupBandit(RoundSession.place)
               }
+              // Watching peers: Groom Salute when shared Round lands a Place (spin-settle).
+              maybeSaluteSharedLanding()
               applyingRemote = false
               setSyncStatus('live')
             }
