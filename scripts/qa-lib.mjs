@@ -63,11 +63,13 @@ export function roomUrl(base, room) {
 
 export async function ensurePlayers(page, names = ['Azat', 'Alexander']) {
   let q = await gameQuery(page)
-  if (q.scores.length >= names.length) return q
+  const have = new Set((q.scores || []).map((p) => String(p.name || '').toLowerCase()))
   for (const name of names) {
+    if (have.has(String(name).toLowerCase())) continue
     await page.fill('#playerInput', name)
     await page.click('#addPlayerBtn')
     await page.waitForTimeout(250)
+    have.add(String(name).toLowerCase())
   }
   return gameQuery(page)
 }
