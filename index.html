@@ -404,6 +404,19 @@
       .spin-btn[data-spin-available='true'] {
         box-shadow: 0 0 0 3px rgba(184, 255, 0, 0.55);
       }
+      .round-reset {
+        min-height: 2.2rem;
+        padding: 0.3rem 0.8rem;
+        border: 2px solid var(--gold);
+        background: #111;
+        color: var(--gold);
+        font-size: 0.8rem;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+      .round-reset[hidden] {
+        display: none;
+      }
       .bandit-btn {
         background: linear-gradient(90deg, #111, #555, #ffe566, #111);
         background-size: 300% 100%;
@@ -813,6 +826,9 @@
             <div class="wheel" id="wheel"></div>
           </div>
           <button type="button" class="spin-btn" id="spinBtn">КРУТИТЬ МЕСТО!!!</button>
+          <button type="button" class="round-reset" id="roundResetBtn" hidden>
+            Раунд завис — сбросить раунд
+          </button>
         </div>
 
         <div class="result" id="result" aria-live="polite">
@@ -877,7 +893,7 @@
           <button type="button" id="gameRestartBtn">Перезапустить игру</button>
         </div>
         <div class="footer-tools">
-          <span id="buildTag">build 24</span>
+          <span id="buildTag">build 25</span>
         </div>
       </footer>
     </div>
@@ -1019,6 +1035,8 @@
         var BANDIT_MS = 2800
         var MIN_TURNS = 7
         var GROOM_SALUTE_MS = 3200
+        // A Round whose wheel has not settled by now lost its spinner (reload / closed tab).
+        var ROUND_STALL_MS = SPIN_MS + 2400
         var GROOM_STICKERS = [
           { id: 'football', src: 'assets/groom-salute/football.png' },
           { id: 'zvyrk', src: 'assets/groom-salute/zvyrk-cat.png' },
@@ -1046,6 +1064,9 @@
           localScored: false,
           localOwner: null,
         }
+        // Stalled open Round watch: local timer per Round token (no cross-phone clocks).
+        // stuckToken = open Round without a Place that nobody can finish → Round Reset.
+        var roundStall = { token: null, timer: null, stuckToken: null }
         var applyingRemote = false
         var pushTimer = null
         var paintTimer = null
@@ -1058,6 +1079,7 @@
 
         var els = {
           syncBar: document.getElementById('syncBar'),
+          roundResetBtn: document.getElementById('roundResetBtn'),
           tickerA: document.getElementById('tickerA'),
           wheel: document.getElementById('wheel'),
           stage: document.getElementById('stage'),
@@ -1097,6 +1119,8 @@
         }
 
         // Shared Round wire shape: Round Owner index, Place, Challenge, scored, token.
+        // Place is chosen at spin start; settled = the wheel has stopped and the Place is shown.
+        // aborted = closed by Round Reset without points.
         RoundSession.empty = function (owner) {
           return {
             owner: Math.max(0, Number(owner) || 0),
@@ -1104,7 +1128,9 @@
             placeLabel: null,
             placeColor: null,
             challenge: null,
+            settled: false,
             scored: false,
+            aborted: false,
             token: uid('r'),
           }
         }
@@ -1192,6 +1218,14 @@
         }
 
         function refreshSpinControl() {
+          var stuck = !!(
+            !spinning &&
+            state.round &&
+            !state.round.scored &&
+            !state.round.placeId &&
+            roundStall.stuckToken === state.round.token
+          )
+          els.roundResetBtn.hidden = !stuck
           if (spinning) {
             els.spinBtn.disabled = true
             els.spinBtn.textContent = 'КРУТИТСЯ!!!'
@@ -1204,7 +1238,7 @@
             els.spinBtn.disabled = true
             // Open Round with a Place → score first; without Place → someone is still spinning.
             var hasPlace = !!(
-              (state.round && state.round.placeId) ||
+              (state.round && state.round.placeId && state.round.settled) ||
               (RoundSession.place && RoundSession.place.id)
             )
             els.spinBtn.textContent = hasPlace ? 'СНАЧАЛА ОЧКИ' : 'КТО-ТО КРУТИТ…'
@@ -1278,7 +1312,10 @@
               placeLabel: raw.round.placeLabel ? String(raw.round.placeLabel) : null,
               placeColor: raw.round.placeColor ? String(raw.round.placeColor) : null,
               challenge: raw.round.challenge != null ? String(raw.round.challenge) : null,
+              // Legacy Rounds wrote placeId only after the wheel stopped.
+              settled: raw.round.settled != null ? !!raw.round.settled : !!raw.round.placeId,
               scored: !!raw.round.scored,
+              aborted: !!raw.round.aborted,
               token: raw.round.token ? String(raw.round.token) : uid('r'),
             }
             if (!base.players.length) base.round = null
@@ -2093,7 +2130,7 @@
         }
 
         function landingSaluteKey(round) {
-          if (!round || !round.token || !round.placeId) return null
+          if (!round || !round.token || !round.placeId || !round.settled) return null
           return String(round.token) + '|' + String(round.placeId)
         }
 
@@ -2166,7 +2203,7 @@
             refreshSpinControl()
             return
           }
-          if (!state.round.placeId) {
+          if (!state.round.placeId || !state.round.settled) {
             if (!spinning) {
               els.result.innerHTML =
                 '<p class="result-placeholder">Кто-то крутит колесо…</p>'
@@ -2200,7 +2237,8 @@
           }
           RoundSession.localOwner = state.round.owner
           RoundSession.localScored = !!state.round.scored
-          if (state.round.placeId) {
+          // Place is on the wire from spin start; it becomes playable only once settled.
+          if (state.round.placeId && state.round.settled) {
             RoundSession.place = destFromRoundWire(state.round)
           }
           if (state.round.challenge != null) RoundSession.challenge = state.round.challenge
@@ -2209,11 +2247,69 @@
             RoundSession.place = null
             RoundSession.challenge = null
             lockRoundAfterScore()
+            if (state.round.aborted) {
+              els.banditBox.classList.remove('show')
+              els.result.innerHTML = '<p class="result-placeholder">Раунд сброшен — можно крутить</p>'
+            }
+            watchRoundStall()
             refreshSpinControl()
             return
           }
           // Open Round: put bandit/score back on screen (especially after refresh / late join).
           restoreOpenRoundUi()
+          watchRoundStall()
+        }
+
+        // Arm a local timer for an open Round whose wheel has not settled.
+        function watchRoundStall() {
+          var r = state.round
+          if (!r || r.scored || r.settled) {
+            clearTimeout(roundStall.timer)
+            roundStall.timer = null
+            roundStall.token = null
+            return
+          }
+          if (roundStall.token === r.token) return
+          clearTimeout(roundStall.timer)
+          roundStall.token = r.token
+          roundStall.timer = setTimeout(function () {
+            onRoundStall(r.token)
+          }, ROUND_STALL_MS)
+        }
+
+        // Spinner is gone: any phone settles the Round on its Place; without a Place
+        // (older build) offer Round Reset instead of forcing a Score Clear.
+        function onRoundStall(token) {
+          roundStall.timer = null
+          var r = state.round
+          if (!r || r.scored || r.settled || r.token !== token) return
+          if (spinning) {
+            // Own wheel still animating — it settles itself; check again later.
+            roundStall.token = null
+            watchRoundStall()
+            return
+          }
+          if (r.placeId) {
+            RoundSession.localOwner = r.owner
+            showPlace(destFromRoundWire(r))
+            return
+          }
+          roundStall.stuckToken = token
+          refreshSpinControl()
+        }
+
+        // Round Reset: close only the open Round, no points; Turn Player, Night Progress
+        // and Room Generation stay. The closed Round stays on the wire (scored + aborted)
+        // so peers adopt it instead of defending their open copy (ADR-0003).
+        function resetStuckRound() {
+          var r = state.round
+          if (!r || r.scored || spinning) return
+          abortRound(true)
+          r.scored = true
+          r.aborted = true
+          state.round = r
+          roundStall.stuckToken = null
+          touch({ immediate: true })
         }
 
         function setupBandit(dest) {
@@ -2273,6 +2369,7 @@
             state.round.placeLabel = dest.label
             state.round.placeColor = dest.color
             state.round.challenge = null
+            state.round.settled = true
             state.round.scored = false
           }
           // Mark landing before salute so the RTDB echo does not fire a second burst.
@@ -2297,8 +2394,15 @@
           // One open Round per Room — spin is ignored while a Round is already open (ADR-0003).
           if (roundIsOpen()) return
           spinning = true
-          // Record Round Owner on the shared Room so every phone sees the same Round.
+          var sl = slice()
+          var index = Math.floor(Math.random() * state.destinations.length)
+          var target = state.destinations[index]
+          // Record Round Owner and the chosen Place on the shared Room before the wheel
+          // turns, so a reload mid-spin cannot leave an open Round without a Place.
           RoundSession.open(state.activePlayer)
+          state.round.placeId = target.id
+          state.round.placeLabel = target.label
+          state.round.placeColor = target.color
           var spinToken = state.round && state.round.token
           refreshSpinControl()
           els.banditBox.classList.remove('show', 'is-rolling', 'challenge-ready')
@@ -2306,8 +2410,6 @@
           renderPlayers()
           touch({ immediate: true, skipEditor: true })
 
-          var sl = slice()
-          var index = Math.floor(Math.random() * state.destinations.length)
           var segmentCenter = index * sl + sl / 2
           var jitter = (Math.random() - 0.5) * (sl * 0.4)
           var targetMod = (360 - segmentCenter + jitter + 360) % 360
@@ -2321,9 +2423,7 @@
 
           setTimeout(function () {
             var mod = ((rotation % 360) + 360) % 360
-            var local = (360 - mod) % 360
-            var landed = Math.floor(local / sl) % state.destinations.length
-            var snapLocal = landed * sl + sl / 2
+            var snapLocal = index * sl + sl / 2
             rotation = rotation - mod + ((360 - snapLocal + 360) % 360)
             els.wheel.style.transition = 'none'
             els.wheel.style.transform = 'rotate(' + rotation + 'deg)'
@@ -2338,7 +2438,7 @@
               renderPlayers()
               return
             }
-            showPlace(state.destinations[landed])
+            showPlace(target)
             refreshSpinControl()
           }, SPIN_MS)
         }
@@ -2645,6 +2745,7 @@
         })
 
         document.getElementById('scoreClearBtn').addEventListener('click', scoreClear)
+        els.roundResetBtn.addEventListener('click', resetStuckRound)
         document.getElementById('gameRestartBtn').addEventListener('click', gameRestart)
 
         els.editorList.addEventListener('change', function (e) {
@@ -2750,6 +2851,7 @@
         } catch (e) {}
 
         renderAll()
+        watchRoundStall()
         tryBootFromHash()
         if (!dbRef) tryBootSavedSync()
         if (!dbRef) {
