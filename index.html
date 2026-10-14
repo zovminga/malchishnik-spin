@@ -1135,7 +1135,14 @@
           return String(s)
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;')
+        }
+
+        // Colours reach HTML attributes and CSS: only #rgb / #rrggbb(aa) from the Room.
+        function safeColor(c, fallback) {
+          return /^#[0-9a-fA-F]{3,8}$/.test(String(c || '')) ? String(c) : fallback
         }
 
         function uid(prefix) {
@@ -1316,8 +1323,8 @@
                 id: d.id || uid('d'),
                 label: String(d.label || 'МЕСТО').slice(0, 16),
                 tagline: String(d.tagline || ''),
-                color: d.color || PRESET_COLORS[i % PRESET_COLORS.length],
-                text: d.text || '#fff8e7',
+                color: safeColor(d.color, PRESET_COLORS[i % PRESET_COLORS.length]),
+                text: safeColor(d.text, '#fff8e7'),
               }
             })
           }
@@ -1349,7 +1356,7 @@
               owner: owner,
               placeId: raw.round.placeId ? String(raw.round.placeId) : null,
               placeLabel: raw.round.placeLabel ? String(raw.round.placeLabel) : null,
-              placeColor: raw.round.placeColor ? String(raw.round.placeColor) : null,
+              placeColor: raw.round.placeColor ? safeColor(raw.round.placeColor, '#ffe566') : null,
               challenge: raw.round.challenge != null ? String(raw.round.challenge) : null,
               // Legacy Rounds wrote placeId only after the wheel stopped.
               settled: raw.round.settled != null ? !!raw.round.settled : !!raw.round.placeId,
@@ -1361,7 +1368,22 @@
           } else {
             base.round = null
           }
-          base.history = Array.isArray(raw.history) ? raw.history.slice(0, 20) : []
+          base.history = Array.isArray(raw.history)
+            ? raw.history
+                .filter(function (h) {
+                  return h && typeof h === 'object'
+                })
+                .slice(0, 20)
+                .map(function (h) {
+                  return {
+                    who: String(h.who || ''),
+                    place: String(h.place || ''),
+                    challenge: h.challenge != null ? String(h.challenge) : null,
+                    note: String(h.note || ''),
+                    color: safeColor(h.color, '#ff1493'),
+                  }
+                })
+            : []
           // Room Generation: absent/NaN/negative → 0 (lowest safe baseline).
           var gen = Number(raw.roomGeneration)
           base.roomGeneration = Number.isFinite(gen) && gen > 0 ? Math.floor(gen) : 0
@@ -1981,14 +2003,14 @@
               '<g><path d="' +
               slicePath(200, 200, 190, start, end) +
               '" fill="' +
-              d.color +
+              esc(d.color) +
               '" stroke="#120018" stroke-width="3"></path>' +
               '<text x="' +
               label.x +
               '" y="' +
               label.y +
               '" fill="' +
-              d.text +
+              esc(d.text) +
               '" font-size="' +
               fontSize +
               '" font-family="system-ui,sans-serif" font-weight="900" text-anchor="middle" dominant-baseline="middle" transform="rotate(' +
@@ -2108,7 +2130,7 @@
             .map(function (h) {
               return (
                 '<li style="border-left-color:' +
-                (h.color || '#ff1493') +
+                esc(h.color || '#ff1493') +
                 '"><span class="who">' +
                 esc(h.who || '') +
                 '</span> → <strong>' +
@@ -2135,7 +2157,7 @@
             '<input data-field="label" value="' +
             esc(d.label) +
             '" maxlength="16" placeholder="Название места" style="border-color:' +
-            d.color +
+            esc(d.color) +
             '" />' +
             '<button type="button" class="mini danger" data-del-place>Удалить</button>' +
             '</div>'
@@ -2333,7 +2355,7 @@
         function paintPlaceResult(dest) {
           els.result.innerHTML =
             '<p class="result-kicker">★★ МЕСТО ★★</p><p class="result-label" style="color:' +
-            dest.color +
+            esc(dest.color) +
             '">' +
             esc(dest.label) +
             '</p><p class="result-tagline">' +
