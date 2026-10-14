@@ -6,8 +6,8 @@
 
 **Status:** ready-for-agent
 
-- [ ] Second client in the same Room observes the Groom Salute for the shared JACKPOT landing
-- [ ] No separate salute document required unless peers cannot see it via the existing spin-settle / Round path
-- [ ] Night Progress, Round Owner, and open-Round rules unchanged
-- [ ] Playwright multi-client check covers peer salute visibility
-- [ ] Existing wipe and race QA (dual-spin, dual-award, mid-round join) still pass
+- [x] Second client in the same Room observes the Groom Salute for the shared JACKPOT landing
+- [x] No separate salute document required unless peers cannot see it via the existing spin-settle / Round path
+- [x] Night Progress, Round Owner, and open-Round rules unchanged
+- [x] Playwright multi-client check covers peer salute visibility
+- [x] Existing wipe and race QA (dual-spin, dual-award, mid-round join) still pass
