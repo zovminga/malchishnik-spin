@@ -1792,6 +1792,8 @@
             state.activePlayer = idx % state.players.length
           }
 
+          // Open Round Owner is blocked above. If a scored/stale Round still
+          // points at this seat, drop it so the index cannot land on the next Player.
           if (state.round && state.round.owner != null) {
             if (state.round.owner > idx) state.round.owner -= 1
             else if (state.round.owner === idx) state.round = null
