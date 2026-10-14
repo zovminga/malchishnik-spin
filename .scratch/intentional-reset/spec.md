@@ -55,7 +55,7 @@ Replace the old soft-reset control with two intentional actions — **Score Clea
 
 ## Implementation Decisions
 
-- Respect ADR-0001 (Night Progress wins when Room Generation matches), ADR-0002 (one default Room for friends), ADR-0003 (open Round belongs to the spinner), ADR-0004 (roster removal keeps Night Progress; does not bump Room Generation), ADR-0005 (intentional reset via Room Generation).
+- Respect ADR-0001 (Night Progress wins when Room Generation matches), ADR-0002 (one default Room for friends), ADR-0003 (open Round belongs to the spinner), ADR-0004 (roster removal sticks via its own removal record; does not bump Room Generation), ADR-0005 (intentional reset via Room Generation).
 - Ship remains a single HTML artifact with Firebase RTDB; no new backend, WebSocket layer, CRDT, or bundler.
 - Extend Room state with a monotonic Room Generation value, defaulting missing/legacy data to a safe baseline (treat absent as the lowest generation).
 - Score Clear and Game Restart are the only user actions that bump Room Generation.

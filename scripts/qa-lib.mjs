@@ -1,6 +1,41 @@
 /**
  * Shared Playwright helpers over window.Malchishnik (Game.query seam).
  */
+import fs from 'fs'
+import os from 'os'
+import path from 'path'
+import { fileURLToPath } from 'url'
+
+// Default target is the working copy on the local server (npm start), not live Pages.
+export const LOCAL_BASE = 'http://127.0.0.1:8765/'
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const CHROME_CANDIDATES = [
+  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  '/usr/bin/google-chrome-stable',
+  '/usr/bin/google-chrome',
+]
+// Room ids QA may write to; the party Room (no ?room=) is never a fixture.
+const TEST_ROOM_PREFIXES = ['qa-', 'review-']
+
+/** Page base URL: QA_URL / BASE env, else the local server. */
+export function qaBase() {
+  return String(process.env.QA_URL || process.env.BASE || LOCAL_BASE).replace(/\/?$/, '/')
+}
+
+/** Folder for screenshots / reports: QA_OUT, else qa-artifacts/<name> in the repo, else tmp. */
+export function artifactDir(name) {
+  const dirs = [process.env.QA_OUT, path.join(REPO_ROOT, 'qa-artifacts', name), path.join(os.tmpdir(), 'malchishnik-qa', name)]
+  for (const dir of dirs) {
+    if (!dir) continue
+    try {
+      fs.mkdirSync(dir, { recursive: true })
+      return dir
+    } catch (e) {
+      if (e.code !== 'EACCES' && e.code !== 'EROFS' && e.code !== 'ENOENT') throw e
+    }
+  }
+  throw new Error('no writable artifact folder for ' + name)
+}
 export async function waitForGame(page, timeout = 20000) {
   await page.waitForFunction(
     () =>
@@ -50,14 +85,33 @@ export async function pageRichness(page, state) {
   return page.evaluate((s) => window.Malchishnik.richness(s), state)
 }
 
+/** CHROME env, else an installed Chrome, else undefined (Playwright's bundled Chromium). */
 export function chromePath() {
-  return process.env.CHROME || '/usr/bin/google-chrome-stable'
+  if (process.env.CHROME) return process.env.CHROME
+  return CHROME_CANDIDATES.find((p) => fs.existsSync(p))
+}
+
+// Firebase rules do not allow listing Rooms, so QA keeps its own list for scripts/qa-rooms.mjs.
+export const TEST_ROOMS_FILE = path.join(REPO_ROOT, 'qa-artifacts', 'rooms.txt')
+
+/** Throw unless the Room id is an isolated test Room; record it for later clean-up. */
+export function assertTestRoom(room) {
+  if (!TEST_ROOM_PREFIXES.some((prefix) => String(room).startsWith(prefix))) {
+    throw new Error(`refusing to use Room "${room}": QA Rooms must start with ${TEST_ROOM_PREFIXES.join(' / ')}`)
+  }
+  try {
+    fs.mkdirSync(path.dirname(TEST_ROOMS_FILE), { recursive: true })
+    fs.appendFileSync(TEST_ROOMS_FILE, room + '\n')
+  } catch (e) {
+    if (e.code !== 'EACCES' && e.code !== 'EROFS') throw e
+  }
+  return room
 }
 
 /** Isolate from the default shared room. */
 export function roomUrl(base, room) {
   const root = String(base || '').replace(/\/?$/, '/')
-  const id = (room || 'qa-' + Date.now()).replace(/[^\w\-]/g, '').slice(0, 40)
+  const id = assertTestRoom((room || 'qa-' + Date.now()).replace(/[^\w\-]/g, '').slice(0, 40))
   return `${root}index.html?room=${id}&t=${Date.now()}`
 }
 

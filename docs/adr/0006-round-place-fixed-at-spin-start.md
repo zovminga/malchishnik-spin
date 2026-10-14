@@ -1,0 +1,5 @@
+# Round Place is fixed at spin start
+
+The open Round used to reach the Room without a Place for the whole wheel animation, so a reload or closed tab on the Round Owner's phone left the Room stuck on an open Round that nobody could finish; the only exit was Score Clear, which wipes the night. Now the spinning phone picks the Place before the wheel turns and writes it on the Round as not yet settled; other phones keep it hidden until the Round is settled, so the reveal still happens when the wheel stops. Any phone that sees an unsettled Round for longer than the spin plus a grace period (its own local timer, not cross-phone clocks) settles it on the written Place. An open Round without a Place (left by an older build) offers Round Reset, which closes the Round with no points and stays on the wire as a closed Round so the open-Round defense of ADR-0003 does not bring it back.
+
+Rejected: auto-aborting a stalled Round (throws away a spin that already has a Place) and deadline timestamps on the Round (phone clocks drift, see the clock-skew review finding).

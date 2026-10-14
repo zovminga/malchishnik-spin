@@ -17,8 +17,12 @@ A task attached to a Place that may be drawn after the wheel lands.
 _Avoid_: Quest, mini-game, assignment
 
 **Round**:
-The open stretch after a spin lands until points for that spin are awarded.
+The open stretch from a spin until points for that spin are awarded or the Round is reset. Its Place is chosen when the wheel starts turning and shown to everyone when the wheel stops.
 _Avoid_: Turn (for this meaning), spin result window
+
+**Round Reset**:
+An action that closes only an open Round nobody can finish (it has no Place), with no points. Turn Player, Night Progress and Room Generation stay as they were. Offered only for such a stuck Round.
+_Avoid_: Score Clear (for this meaning), «сбросить игру», abort
 
 **Round Owner**:
 The player who spun this Round and who alone receives its points. Not the same idea as Turn Player.
@@ -33,7 +37,7 @@ Someone on the Room roster with a display name and a running score. Adding and r
 _Avoid_: Participant, member, guest (for the roster seat), участник (UI may say «игроки»)
 
 **Night Progress**:
-How “full” a Room already is: entries in the night log, Players on the list, and total scores. When Room Generation matches, a fuller Room beats a emptier one — so a fresh phone with almost nothing does not wipe the party. Removing a Player can thin Night Progress, so another phone’s fuller copy may put them back.
+How “full” a Room already is: entries in the night log, Players on the list, and total scores. When Room Generation matches, a fuller Room beats a emptier one — so a fresh phone with almost nothing does not wipe the party. A removed Player stays removed on every phone: Night Progress is compared only after removed Players are dropped.
 _Avoid_: Richness (code name), freshness, latest write, «кто последний сохранил»
 
 **Room Generation**:

@@ -404,6 +404,31 @@
       .spin-btn[data-spin-available='true'] {
         box-shadow: 0 0 0 3px rgba(184, 255, 0, 0.55);
       }
+      .room-offline #spinBtn,
+      .room-offline #banditBtn,
+      .room-offline .score-actions button,
+      .room-offline #roundResetBtn,
+      .room-offline .reset-actions button,
+      .room-offline #addPlayerBtn,
+      .room-offline .player-list button,
+      .room-offline #addPlaceBtn,
+      .room-offline #editorList {
+        opacity: 0.45;
+        pointer-events: none;
+      }
+      .round-reset {
+        min-height: 2.2rem;
+        padding: 0.3rem 0.8rem;
+        border: 2px solid var(--gold);
+        background: #111;
+        color: var(--gold);
+        font-size: 0.8rem;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+      .round-reset[hidden] {
+        display: none;
+      }
       .bandit-btn {
         background: linear-gradient(90deg, #111, #555, #ffe566, #111);
         background-size: 300% 100%;
@@ -813,6 +838,9 @@
             <div class="wheel" id="wheel"></div>
           </div>
           <button type="button" class="spin-btn" id="spinBtn">КРУТИТЬ МЕСТО!!!</button>
+          <button type="button" class="round-reset" id="roundResetBtn" hidden>
+            Раунд завис — сбросить раунд
+          </button>
         </div>
 
         <div class="result" id="result" aria-live="polite">
@@ -877,7 +905,7 @@
           <button type="button" id="gameRestartBtn">Перезапустить игру</button>
         </div>
         <div class="footer-tools">
-          <span id="buildTag">build 24</span>
+          <span id="buildTag">build 28</span>
         </div>
       </footer>
     </div>
@@ -988,6 +1016,8 @@
           guinness: ['Пить только сидя на стене'],
         }
 
+        // Removed Player ids kept on the Room (oldest dropped first).
+        var MAX_REMOVED_PLAYERS = 64
         var LOCAL_KEY = 'malchishnik-state-v3'
         var SYNC_KEY = 'malchishnik-sync-v1'
         var DEFAULT_ROOM =
@@ -1019,6 +1049,8 @@
         var BANDIT_MS = 2800
         var MIN_TURNS = 7
         var GROOM_SALUTE_MS = 3200
+        // A Round whose wheel has not settled by now lost its spinner (reload / closed tab).
+        var ROUND_STALL_MS = SPIN_MS + 2400
         var GROOM_STICKERS = [
           { id: 'football', src: 'assets/groom-salute/football.png' },
           { id: 'zvyrk', src: 'assets/groom-salute/zvyrk-cat.png' },
@@ -1046,18 +1078,32 @@
           localScored: false,
           localOwner: null,
         }
+        // Stalled open Round watch: local timer per Round token (no cross-phone clocks).
+        // stuckToken = open Round without a Place that nobody can finish → Round Reset.
+        var roundStall = { token: null, timer: null, stuckToken: null }
         var applyingRemote = false
         var pushTimer = null
         var paintTimer = null
         var paintSkipEditor = true
+        // Editor kept a focused Place block during a re-render; refresh it after blur.
+        var editorKeptStale = false
         var dbRef = null
         var dbUnsub = null
+        // Connection to the Room: Firebase .info/connected plus the browser online flag.
+        // roomOffline flips on after a short grace so boot / brief blips do not flash the bar.
+        var OFFLINE_GRACE_MS = 1500
+        var connectedRef = null
+        var connectedUnsub = null
+        var firebaseConnected = false
+        var roomOffline = false
+        var offlineTimer = null
         var firebaseApp = null
         var syncReady = false
         var sawRemoteOnce = false
 
         var els = {
           syncBar: document.getElementById('syncBar'),
+          roundResetBtn: document.getElementById('roundResetBtn'),
           tickerA: document.getElementById('tickerA'),
           wheel: document.getElementById('wheel'),
           stage: document.getElementById('stage'),
@@ -1089,7 +1135,14 @@
           return String(s)
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;')
+        }
+
+        // Colours reach HTML attributes and CSS: only #rgb / #rrggbb(aa) from the Room.
+        function safeColor(c, fallback) {
+          return /^#[0-9a-fA-F]{3,8}$/.test(String(c || '')) ? String(c) : fallback
         }
 
         function uid(prefix) {
@@ -1097,6 +1150,8 @@
         }
 
         // Shared Round wire shape: Round Owner index, Place, Challenge, scored, token.
+        // Place is chosen at spin start; settled = the wheel has stopped and the Place is shown.
+        // aborted = closed by Round Reset without points.
         RoundSession.empty = function (owner) {
           return {
             owner: Math.max(0, Number(owner) || 0),
@@ -1104,7 +1159,9 @@
             placeLabel: null,
             placeColor: null,
             challenge: null,
+            settled: false,
             scored: false,
+            aborted: false,
             token: uid('r'),
           }
         }
@@ -1184,7 +1241,7 @@
 
         // Light control polish: Turn Player can tell when spin is available.
         function spinIsAvailable() {
-          return !spinning && !banditSpinning && !roundIsOpen() && state.players.length > 0
+          return !spinning && !banditSpinning && !roomOffline && !roundIsOpen() && state.players.length > 0
         }
 
         function scoreActionsAreVisible() {
@@ -1192,6 +1249,21 @@
         }
 
         function refreshSpinControl() {
+          var stuck = !!(
+            !spinning &&
+            state.round &&
+            !state.round.scored &&
+            !state.round.placeId &&
+            roundStall.stuckToken === state.round.token
+          )
+          els.roundResetBtn.hidden = !stuck
+          if (roomOffline && !spinning) {
+            els.spinBtn.disabled = true
+            els.spinBtn.removeAttribute('aria-busy')
+            els.spinBtn.textContent = 'НЕТ СВЯЗИ'
+            els.spinBtn.setAttribute('data-spin-available', 'false')
+            return
+          }
           if (spinning) {
             els.spinBtn.disabled = true
             els.spinBtn.textContent = 'КРУТИТСЯ!!!'
@@ -1204,7 +1276,7 @@
             els.spinBtn.disabled = true
             // Open Round with a Place → score first; without Place → someone is still spinning.
             var hasPlace = !!(
-              (state.round && state.round.placeId) ||
+              (state.round && state.round.placeId && state.round.settled) ||
               (RoundSession.place && RoundSession.place.id)
             )
             els.spinBtn.textContent = hasPlace ? 'СНАЧАЛА ОЧКИ' : 'КТО-ТО КРУТИТ…'
@@ -1232,6 +1304,8 @@
             // Shared open Round for the Room: Round Owner + scored flag (ADR-0003).
             round: null,
             history: [],
+            // Removed Player ids: a removal sticks for every phone (ADR-0004).
+            removedPlayers: [],
             // Room Generation: missing/legacy → lowest safe baseline (ADR-0005).
             roomGeneration: 0,
             // Empty local clocks must not outrank the Room — see scripts/repro-score-wipe.mjs.
@@ -1249,8 +1323,8 @@
                 id: d.id || uid('d'),
                 label: String(d.label || 'МЕСТО').slice(0, 16),
                 tagline: String(d.tagline || ''),
-                color: d.color || PRESET_COLORS[i % PRESET_COLORS.length],
-                text: d.text || '#fff8e7',
+                color: safeColor(d.color, PRESET_COLORS[i % PRESET_COLORS.length]),
+                text: safeColor(d.text, '#fff8e7'),
               }
             })
           }
@@ -1264,8 +1338,14 @@
               : []
           })
           base.players = Array.isArray(raw.players)
-            ? raw.players.map(function (p) {
-                return { name: String(p.name || 'Игрок').slice(0, 18), score: Number(p.score) || 0 }
+            ? raw.players.map(function (p, i) {
+                var name = String(p.name || 'Игрок').slice(0, 18)
+                return {
+                  // Older builds had no Player id: derive the same one on every phone.
+                  id: p.id ? String(p.id) : 'legacy-' + i + '-' + name,
+                  name: name,
+                  score: Number(p.score) || 0,
+                }
               })
             : []
           base.activePlayer = Math.max(0, Math.min(base.players.length - 1, Number(raw.activePlayer) || 0))
@@ -1276,23 +1356,93 @@
               owner: owner,
               placeId: raw.round.placeId ? String(raw.round.placeId) : null,
               placeLabel: raw.round.placeLabel ? String(raw.round.placeLabel) : null,
-              placeColor: raw.round.placeColor ? String(raw.round.placeColor) : null,
+              placeColor: raw.round.placeColor ? safeColor(raw.round.placeColor, '#ffe566') : null,
               challenge: raw.round.challenge != null ? String(raw.round.challenge) : null,
+              // Legacy Rounds wrote placeId only after the wheel stopped.
+              settled: raw.round.settled != null ? !!raw.round.settled : !!raw.round.placeId,
               scored: !!raw.round.scored,
+              aborted: !!raw.round.aborted,
               token: raw.round.token ? String(raw.round.token) : uid('r'),
             }
             if (!base.players.length) base.round = null
           } else {
             base.round = null
           }
-          base.history = Array.isArray(raw.history) ? raw.history.slice(0, 20) : []
+          base.history = Array.isArray(raw.history)
+            ? raw.history
+                .filter(function (h) {
+                  return h && typeof h === 'object'
+                })
+                .slice(0, 20)
+                .map(function (h) {
+                  return {
+                    who: String(h.who || ''),
+                    place: String(h.place || ''),
+                    challenge: h.challenge != null ? String(h.challenge) : null,
+                    note: String(h.note || ''),
+                    color: safeColor(h.color, '#ff1493'),
+                  }
+                })
+            : []
           // Room Generation: absent/NaN/negative → 0 (lowest safe baseline).
           var gen = Number(raw.roomGeneration)
           base.roomGeneration = Number.isFinite(gen) && gen > 0 ? Math.floor(gen) : 0
           var ts = Number(raw.updatedAt)
           base.updatedAt = Number.isFinite(ts) ? ts : Date.now()
           base.updatedBy = raw.updatedBy || ''
+          base.removedPlayers = mergeRemovedPlayers(raw.removedPlayers, [])
+          dropRemovedPlayers(base, base.removedPlayers)
           return base
+        }
+
+        // Union of removed Player ids from two copies of the Room, oldest first, capped.
+        function mergeRemovedPlayers(a, b) {
+          var out = []
+          ;[a, b].forEach(function (list) {
+            ;(Array.isArray(list) ? list : []).forEach(function (id) {
+              id = String(id)
+              if (out.indexOf(id) === -1) out.push(id)
+            })
+          })
+          return out.slice(-MAX_REMOVED_PLAYERS)
+        }
+
+        // Drop one roster seat and keep Turn Player / Round Owner indexes on the same people.
+        function dropSeat(s, idx) {
+          s.players.splice(idx, 1)
+          if (!s.players.length) {
+            s.activePlayer = 0
+          } else if (s.activePlayer > idx) {
+            s.activePlayer -= 1
+          } else if (s.activePlayer === idx) {
+            // Next Turn Player after the removed seat (same rule as post-award handoff).
+            s.activePlayer = idx % s.players.length
+          }
+          if (!s.round || s.round.owner == null) return
+          if (s.round.owner > idx) {
+            s.round.owner -= 1
+          } else if (s.round.owner === idx) {
+            if (s.round.scored || !s.players.length) {
+              // Scored/stale Round on this seat: drop it so the index cannot land on the next Player.
+              s.round = null
+            } else {
+              // Round Owner removed on another phone: close the Round without points.
+              s.round.scored = true
+              s.round.aborted = true
+            }
+          }
+        }
+
+        // Remove every Player whose id is in removed (in place). Returns how many were dropped.
+        function dropRemovedPlayers(s, removed) {
+          if (!s || !Array.isArray(s.players) || !removed || !removed.length) return 0
+          var dropped = 0
+          for (var idx = s.players.length - 1; idx >= 0; idx--) {
+            if (removed.indexOf(String(s.players[idx].id)) === -1) continue
+            dropSeat(s, idx)
+            dropped++
+          }
+          return dropped
         }
 
         // Night Progress numeric score (history length, players, total scores).
@@ -1308,6 +1458,8 @@
           default: defaultState,
           normalize: normalizeState,
           richness: stateRichness,
+          mergeRemovedPlayers: mergeRemovedPlayers,
+          dropRemovedPlayers: dropRemovedPlayers,
         }
 
         function loadLocalState() {
@@ -1327,7 +1479,14 @@
 
         function setSyncStatus(mode, text) {
           // Технические статусы синка прячем — пользователю не нужны.
-          // Показываем только короткую ошибку, если совсем упало.
+          // Показываем только короткую ошибку, если совсем упало, и «нет связи».
+          if (mode === 'offline') {
+            els.syncBar.hidden = false
+            els.syncBar.className = 'sync-bar show error'
+            els.syncBar.textContent = '● Нет связи — очки и ходы не уходят'
+            return
+          }
+          if (roomOffline) return
           if (mode === 'error') {
             els.syncBar.hidden = false
             els.syncBar.className = 'sync-bar show error'
@@ -1367,7 +1526,39 @@
 
         // Score Clear: zero scores, clear night log, abort open Round; keep Players + Places.
         // Bumps Room Generation so the thinner Room sticks (ADR-0005).
+        // Offline phone must not change the Room: its whole-state write would land later
+        // and fight the Room by Night Progress / Room Generation, losing someone's Rounds.
+        function roomWriteBlocked() {
+          if (!roomOffline) return false
+          setSyncStatus('offline')
+          return true
+        }
+
+        function evaluateConnection() {
+          var down = !!dbRef && (!firebaseConnected || navigator.onLine === false)
+          if (!down) {
+            clearTimeout(offlineTimer)
+            offlineTimer = null
+            if (roomOffline) setRoomOffline(false)
+            return
+          }
+          if (roomOffline || offlineTimer) return
+          offlineTimer = setTimeout(function () {
+            offlineTimer = null
+            setRoomOffline(true)
+          }, OFFLINE_GRACE_MS)
+        }
+
+        function setRoomOffline(offline) {
+          roomOffline = offline
+          document.body.classList.toggle('room-offline', offline)
+          if (offline) setSyncStatus('offline')
+          else setSyncStatus('live')
+          refreshSpinControl()
+        }
+
         function scoreClear() {
+          if (roomWriteBlocked()) return
           if (!confirm('Очистить баллы, лог и зависший раунд?\nИгроки, места и задания останутся.')) return
           abortRound(false)
           state.players.forEach(function (p) {
@@ -1382,6 +1573,7 @@
 
         // Game Restart: Score Clear + remove every Player; keep Places/Challenges (ADR-0005).
         function gameRestart() {
+          if (roomWriteBlocked()) return
           if (
             !confirm(
               'Перезапустить игру?\nУдалит всех игроков, обнулит баллы и лог.\nМеста и задания останутся.',
@@ -1511,11 +1703,35 @@
         // (ADR-0001) and open Round token defense (ADR-0003).
         // Firebase I/O stays a thin adapter that calls these interfaces.
         // -------------------------------------------------------------------------
+        function cloneRoom(s) {
+          return JSON.parse(JSON.stringify(s))
+        }
+
         var MergePolicy = {
           // Transaction: return value to write, or undefined to abort.
+          // Removed Players (ADR-0004) are dropped from both copies first, so Night Progress
+          // is compared without them and a copy that still has them cannot bring them back.
           shouldWrite: function (current, toWrite, writerId) {
             if (current === null) return toWrite
             var cur = RoomState.normalize(current)
+            var removed = RoomState.mergeRemovedPlayers(cur.removedPlayers, toWrite.removedPlayers)
+            var write = cloneRoom(toWrite)
+            write.removedPlayers = removed
+            RoomState.dropRemovedPlayers(write, removed)
+            var curView = cloneRoom(cur)
+            curView.removedPlayers = removed
+            RoomState.dropRemovedPlayers(curView, removed)
+            var accepted = MergePolicy.decideWrite(curView, write, writerId)
+            if (accepted) return accepted
+            // Rejected copy still carries a removal the Room lacks: write only the removal.
+            if (removed.length > cur.removedPlayers.length) {
+              curView.updatedAt = Math.max(cur.updatedAt, Number(write.updatedAt) || 0)
+              curView.updatedBy = writerId
+              return curView
+            }
+          },
+          // Whole-copy write gate on Room copies already cleared of removed Players.
+          decideWrite: function (cur, toWrite, writerId) {
             var curGen = Number(cur.roomGeneration) || 0
             var writeGen = Number(toWrite.roomGeneration) || 0
             // Score Clear / Game Restart: higher Room Generation always sticks.
@@ -1564,11 +1780,24 @@
           decideRemote: function (ctx) {
             var remote = ctx.remote
             var local = ctx.local
-            var writerId = ctx.clientId
             if (!remote) {
               return RoomState.richness(local) > 0 ? { action: 'push' } : { action: 'ignore' }
             }
             var next = RoomState.normalize(remote)
+            // Removals from either copy apply to both before anything is compared (ADR-0004).
+            var removed = RoomState.mergeRemovedPlayers(local.removedPlayers, next.removedPlayers)
+            next.removedPlayers = removed
+            RoomState.dropRemovedPlayers(next, removed)
+            local = cloneRoom(local)
+            local.removedPlayers = removed
+            var dropped = RoomState.dropRemovedPlayers(local, removed)
+            var decision = MergePolicy.decideMerge(ctx, next, local)
+            // Local copy lost removed Players: the adapter adopts it before push / ignore.
+            if (dropped && decision.action !== 'apply') decision.local = local
+            return decision
+          },
+          decideMerge: function (ctx, next, local) {
+            var writerId = ctx.clientId
             var localGen = Number(local.roomGeneration) || 0
             var nextGen = Number(next.roomGeneration) || 0
             // ADR-0005: higher Room Generation always applies / pushes, even if thinner.
@@ -1613,6 +1842,16 @@
             }
             if (next.updatedAt === local.updatedAt && next.updatedBy === local.updatedBy) {
               return { action: 'ignore' }
+            }
+            // The Room moved past this phone (it missed an award while offline / asleep):
+            // a defend push would be rejected by shouldWrite anyway and leave this phone
+            // stuck on a stale open Round, so adopt the fuller Room instead.
+            if (
+              !ctx.spinning &&
+              !ctx.banditSpinning &&
+              RoomState.richness(next) > RoomState.richness(local)
+            ) {
+              return { action: 'apply', state: next }
             }
             // Defend this phone's open Round against wipe / empty join (ADR-0003).
             // Do not defend against a missing round here when Night Progress is richer —
@@ -1764,14 +2003,14 @@
               '<g><path d="' +
               slicePath(200, 200, 190, start, end) +
               '" fill="' +
-              d.color +
+              esc(d.color) +
               '" stroke="#120018" stroke-width="3"></path>' +
               '<text x="' +
               label.x +
               '" y="' +
               label.y +
               '" fill="' +
-              d.text +
+              esc(d.text) +
               '" font-size="' +
               fontSize +
               '" font-family="system-ui,sans-serif" font-weight="900" text-anchor="middle" dominant-baseline="middle" transform="rotate(' +
@@ -1796,35 +2035,22 @@
           els.wheel.style.transform = 'rotate(' + rotation + 'deg)'
         }
 
-        // Drop a Player from the roster (ADR-0004: Night Progress may put them back).
+        // Drop a Player from the roster; the removal sticks for every phone (ADR-0004).
         function removePlayerAt(idx) {
+          if (roomWriteBlocked()) return
           if (spinning || banditSpinning) return
           if (idx == null || idx < 0 || idx >= state.players.length) return
           if (roundIsOpen() && roundOwnerIndex() === idx) return
 
-          state.players.splice(idx, 1)
-
-          if (!state.players.length) {
-            state.activePlayer = 0
-          } else if (state.activePlayer > idx) {
-            state.activePlayer -= 1
-          } else if (state.activePlayer === idx) {
-            // Next Turn Player after the removed seat (same rule as post-award handoff).
-            state.activePlayer = idx % state.players.length
-          }
-
-          // Open Round Owner is blocked above. If a scored/stale Round still
-          // points at this seat, drop it so the index cannot land on the next Player.
-          if (state.round && state.round.owner != null) {
-            if (state.round.owner > idx) state.round.owner -= 1
-            else if (state.round.owner === idx) state.round = null
-          }
+          state.removedPlayers = mergeRemovedPlayers(state.removedPlayers, [state.players[idx].id])
+          // Open Round Owner is blocked above; dropSeat keeps the other indexes in place.
+          dropSeat(state, idx)
           if (RoundSession.localOwner != null) {
             if (RoundSession.localOwner > idx) RoundSession.localOwner -= 1
             else if (RoundSession.localOwner === idx) RoundSession.clearLocal()
           }
 
-          touch()
+          touch({ immediate: true })
         }
 
         function renderPlayers() {
@@ -1840,7 +2066,7 @@
             chip.className = 'player-chip'
             chip.textContent = p.name + ' ' + p.score
             chip.addEventListener('click', function () {
-              if (rosterLocked || roundIsOpen()) return
+              if (rosterLocked || roundIsOpen() || roomWriteBlocked()) return
               state.activePlayer = idx
               touch()
             })
@@ -1904,7 +2130,7 @@
             .map(function (h) {
               return (
                 '<li style="border-left-color:' +
-                (h.color || '#ff1493') +
+                esc(h.color || '#ff1493') +
                 '"><span class="who">' +
                 esc(h.who || '') +
                 '</span> → <strong>' +
@@ -1918,64 +2144,93 @@
             .join('')
         }
 
+        // One Place block of the editor.
+        function placeBlockHtml(d, di) {
+          var list = state.challenges[d.id] || []
+          var html =
+            '<div class="place-block" data-di="' +
+            di +
+            '" data-id="' +
+            esc(d.id) +
+            '">' +
+            '<div class="place-meta">' +
+            '<input data-field="label" value="' +
+            esc(d.label) +
+            '" maxlength="16" placeholder="Название места" style="border-color:' +
+            esc(d.color) +
+            '" />' +
+            '<button type="button" class="mini danger" data-del-place>Удалить</button>' +
+            '</div>'
+          if (!list.length) html += '<p class="empty-chal">Заданий нет — только место</p>'
+          list.forEach(function (t, j) {
+            html +=
+              '<div class="chal-row"><span>' +
+              esc(t) +
+              '</span><button type="button" data-del-chal="' +
+              j +
+              '">✕</button></div>'
+          })
+          return (
+            html +
+            '<div class="add-row"><input data-add-input maxlength="80" placeholder="Новое задание…" /><button type="button" data-add-chal>Добавить</button></div></div>'
+          )
+        }
+
+        // Re-render the editor without touching the Place block that holds focus, so its
+        // input keeps the half-typed text, caret and phone keyboard while peers write.
+        // Half-typed Challenges in other blocks are carried over by Place id.
         function renderEditor() {
           var active = document.activeElement
-          var restore = null
-          if (active && els.editorList.contains(active) && active.getAttribute) {
-            var block = active.closest('.place-block')
-            restore = {
-              di: block ? block.getAttribute('data-di') : null,
-              field: active.getAttribute('data-field'),
-              addInput: active.getAttribute('data-add-input') != null,
-              start: typeof active.selectionStart === 'number' ? active.selectionStart : null,
-              end: typeof active.selectionEnd === 'number' ? active.selectionEnd : null,
+          var keep =
+            active && els.editorList.contains(active) && /^(INPUT|TEXTAREA)$/.test(active.tagName)
+              ? active.closest('.place-block')
+              : null
+          var drafts = {}
+          Array.prototype.forEach.call(els.editorList.querySelectorAll('.place-block'), function (block) {
+            var input = block.querySelector('[data-add-input]')
+            if (input && input.value) drafts[block.getAttribute('data-id')] = input.value
+          })
+          var keepIdx = -1
+          if (keep) {
+            for (var i = 0; i < state.destinations.length; i++) {
+              if (state.destinations[i].id === keep.getAttribute('data-id')) keepIdx = i
             }
           }
-          var html = ''
-          state.destinations.forEach(function (d, di) {
-            var list = state.challenges[d.id] || []
-            html +=
-              '<div class="place-block" data-di="' +
-              di +
-              '" data-id="' +
-              esc(d.id) +
-              '">' +
-              '<div class="place-meta">' +
-              '<input data-field="label" value="' +
-              esc(d.label) +
-              '" maxlength="16" placeholder="Название места" style="border-color:' +
-              d.color +
-              '" />' +
-              '<button type="button" class="mini danger" data-del-place>Удалить</button>' +
-              '</div>'
-            if (!list.length) html += '<p class="empty-chal">Заданий нет — только место</p>'
-            list.forEach(function (t, j) {
-              html +=
-                '<div class="chal-row"><span>' +
-                esc(t) +
-                '</span><button type="button" data-del-chal="' +
-                j +
-                '">✕</button></div>'
+          if (keepIdx === -1) {
+            // Nothing focused, or the focused Place was deleted on another phone.
+            els.editorList.innerHTML =
+              state.destinations.map(placeBlockHtml).join('') ||
+              '<p class="empty-chal">Мест нет — добавь хотя бы одно</p>'
+            editorKeptStale = false
+          } else {
+            Array.prototype.slice.call(els.editorList.childNodes).forEach(function (node) {
+              if (node !== keep) els.editorList.removeChild(node)
             })
-            html +=
-              '<div class="add-row"><input data-add-input maxlength="80" placeholder="Новое задание…" /><button type="button" data-add-chal>Добавить</button></div></div>'
-          })
-          els.editorList.innerHTML = html || '<p class="empty-chal">Мест нет — добавь хотя бы одно</p>'
-          if (!restore || restore.di == null) return
-          var again = els.editorList.querySelector('.place-block[data-di="' + restore.di + '"]')
-          if (!again) return
-          var focusEl = restore.addInput
-            ? again.querySelector('[data-add-input]')
-            : restore.field
-              ? again.querySelector('[data-field="' + restore.field + '"]')
-              : null
-          if (!focusEl) return
-          focusEl.focus()
-          if (restore.start != null && typeof focusEl.setSelectionRange === 'function') {
-            try {
-              focusEl.setSelectionRange(restore.start, restore.end != null ? restore.end : restore.start)
-            } catch (e) {}
+            keep.setAttribute('data-di', String(keepIdx))
+            var tmp = document.createElement('div')
+            state.destinations.forEach(function (d, di) {
+              if (di === keepIdx) return
+              tmp.innerHTML = placeBlockHtml(d, di)
+              if (di < keepIdx) els.editorList.insertBefore(tmp.firstChild, keep)
+              else els.editorList.appendChild(tmp.firstChild)
+            })
+            // The kept block may lag (e.g. a peer's Challenge on the same Place) until blur.
+            editorKeptStale = true
           }
+          Array.prototype.forEach.call(els.editorList.querySelectorAll('.place-block'), function (block) {
+            var input = block.querySelector('[data-add-input]')
+            var draft = drafts[block.getAttribute('data-id')]
+            if (block !== keep && input && draft) input.value = draft
+          })
+        }
+
+        // Editor Place index by the block's Place id (indexes shift when peers add Places).
+        function placeIndexOfBlock(block) {
+          var id = block.getAttribute('data-id')
+          for (var i = 0; i < state.destinations.length; i++) {
+            if (state.destinations[i].id === id) return i
+          }
+          return -1
         }
 
         function renderAll(opts) {
@@ -2093,14 +2348,14 @@
         }
 
         function landingSaluteKey(round) {
-          if (!round || !round.token || !round.placeId) return null
+          if (!round || !round.token || !round.placeId || !round.settled) return null
           return String(round.token) + '|' + String(round.placeId)
         }
 
         function paintPlaceResult(dest) {
           els.result.innerHTML =
             '<p class="result-kicker">★★ МЕСТО ★★</p><p class="result-label" style="color:' +
-            dest.color +
+            esc(dest.color) +
             '">' +
             esc(dest.label) +
             '</p><p class="result-tagline">' +
@@ -2166,7 +2421,7 @@
             refreshSpinControl()
             return
           }
-          if (!state.round.placeId) {
+          if (!state.round.placeId || !state.round.settled) {
             if (!spinning) {
               els.result.innerHTML =
                 '<p class="result-placeholder">Кто-то крутит колесо…</p>'
@@ -2200,7 +2455,8 @@
           }
           RoundSession.localOwner = state.round.owner
           RoundSession.localScored = !!state.round.scored
-          if (state.round.placeId) {
+          // Place is on the wire from spin start; it becomes playable only once settled.
+          if (state.round.placeId && state.round.settled) {
             RoundSession.place = destFromRoundWire(state.round)
           }
           if (state.round.challenge != null) RoundSession.challenge = state.round.challenge
@@ -2209,11 +2465,70 @@
             RoundSession.place = null
             RoundSession.challenge = null
             lockRoundAfterScore()
+            if (state.round.aborted) {
+              els.banditBox.classList.remove('show')
+              els.result.innerHTML = '<p class="result-placeholder">Раунд сброшен — можно крутить</p>'
+            }
+            watchRoundStall()
             refreshSpinControl()
             return
           }
           // Open Round: put bandit/score back on screen (especially after refresh / late join).
           restoreOpenRoundUi()
+          watchRoundStall()
+        }
+
+        // Arm a local timer for an open Round whose wheel has not settled.
+        function watchRoundStall() {
+          var r = state.round
+          if (!r || r.scored || r.settled) {
+            clearTimeout(roundStall.timer)
+            roundStall.timer = null
+            roundStall.token = null
+            return
+          }
+          if (roundStall.token === r.token) return
+          clearTimeout(roundStall.timer)
+          roundStall.token = r.token
+          roundStall.timer = setTimeout(function () {
+            onRoundStall(r.token)
+          }, ROUND_STALL_MS)
+        }
+
+        // Spinner is gone: any phone settles the Round on its Place; without a Place
+        // (older build) offer Round Reset instead of forcing a Score Clear.
+        function onRoundStall(token) {
+          roundStall.timer = null
+          var r = state.round
+          if (!r || r.scored || r.settled || r.token !== token) return
+          if (spinning || roomOffline) {
+            // Own wheel still animating (it settles itself) or offline — check again later.
+            roundStall.token = null
+            watchRoundStall()
+            return
+          }
+          if (r.placeId) {
+            RoundSession.localOwner = r.owner
+            showPlace(destFromRoundWire(r))
+            return
+          }
+          roundStall.stuckToken = token
+          refreshSpinControl()
+        }
+
+        // Round Reset: close only the open Round, no points; Turn Player, Night Progress
+        // and Room Generation stay. The closed Round stays on the wire (scored + aborted)
+        // so peers adopt it instead of defending their open copy (ADR-0003).
+        function resetStuckRound() {
+          if (roomWriteBlocked()) return
+          var r = state.round
+          if (!r || r.scored || spinning) return
+          abortRound(true)
+          r.scored = true
+          r.aborted = true
+          state.round = r
+          roundStall.stuckToken = null
+          touch({ immediate: true })
         }
 
         function setupBandit(dest) {
@@ -2273,6 +2588,7 @@
             state.round.placeLabel = dest.label
             state.round.placeColor = dest.color
             state.round.challenge = null
+            state.round.settled = true
             state.round.scored = false
           }
           // Mark landing before salute so the RTDB echo does not fire a second burst.
@@ -2285,6 +2601,7 @@
 
         function spinPlace() {
           if (spinning || banditSpinning) return
+          if (roomWriteBlocked()) return
           if (!state.players.length) {
             els.turnLine.textContent = 'Сначала добавь игрока'
             els.playerInput.focus()
@@ -2297,8 +2614,15 @@
           // One open Round per Room — spin is ignored while a Round is already open (ADR-0003).
           if (roundIsOpen()) return
           spinning = true
-          // Record Round Owner on the shared Room so every phone sees the same Round.
+          var sl = slice()
+          var index = Math.floor(Math.random() * state.destinations.length)
+          var target = state.destinations[index]
+          // Record Round Owner and the chosen Place on the shared Room before the wheel
+          // turns, so a reload mid-spin cannot leave an open Round without a Place.
           RoundSession.open(state.activePlayer)
+          state.round.placeId = target.id
+          state.round.placeLabel = target.label
+          state.round.placeColor = target.color
           var spinToken = state.round && state.round.token
           refreshSpinControl()
           els.banditBox.classList.remove('show', 'is-rolling', 'challenge-ready')
@@ -2306,8 +2630,6 @@
           renderPlayers()
           touch({ immediate: true, skipEditor: true })
 
-          var sl = slice()
-          var index = Math.floor(Math.random() * state.destinations.length)
           var segmentCenter = index * sl + sl / 2
           var jitter = (Math.random() - 0.5) * (sl * 0.4)
           var targetMod = (360 - segmentCenter + jitter + 360) % 360
@@ -2321,9 +2643,7 @@
 
           setTimeout(function () {
             var mod = ((rotation % 360) + 360) % 360
-            var local = (360 - mod) % 360
-            var landed = Math.floor(local / sl) % state.destinations.length
-            var snapLocal = landed * sl + sl / 2
+            var snapLocal = index * sl + sl / 2
             rotation = rotation - mod + ((360 - snapLocal + 360) % 360)
             els.wheel.style.transition = 'none'
             els.wheel.style.transform = 'rotate(' + rotation + 'deg)'
@@ -2338,13 +2658,14 @@
               renderPlayers()
               return
             }
-            showPlace(state.destinations[landed])
+            showPlace(target)
             refreshSpinControl()
           }, SPIN_MS)
         }
 
         function spinBandit() {
           if (banditSpinning || !RoundSession.place || RoundSession.localScored) return
+          if (roomWriteBlocked()) return
           if (state.round && state.round.scored) return
           var list = state.challenges[RoundSession.place.id] || []
           if (!list.length) return
@@ -2393,6 +2714,7 @@
         }
 
         function award(points, note) {
+          if (roomWriteBlocked()) return
           var patch = Scoring.decide({
             place: RoundSession.place,
             challenge: RoundSession.challenge,
@@ -2430,6 +2752,10 @@
               dbRef.off('value', dbUnsub)
               dbUnsub = null
             }
+            if (connectedUnsub) {
+              connectedRef.off('value', connectedUnsub)
+              connectedUnsub = null
+            }
             if (firebaseApp) {
               firebase.app().delete().catch(function () {})
               firebaseApp = null
@@ -2437,6 +2763,14 @@
             firebaseApp = firebase.initializeApp(config)
             var roomId = (room || 'malchishnik').replace(/[^\w\-]/g, '').slice(0, 40) || 'malchishnik'
             dbRef = firebase.database().ref('rooms/' + roomId + '/state')
+            connectedRef = firebase.database().ref('.info/connected')
+            firebaseConnected = false
+            connectedUnsub = function (snap) {
+              firebaseConnected = snap.val() === true
+              evaluateConnection()
+            }
+            connectedRef.on('value', connectedUnsub)
+            evaluateConnection()
             syncReady = false
             sawRemoteOnce = false
             setSyncStatus('live')
@@ -2481,6 +2815,16 @@
                 spinning: spinning,
                 banditSpinning: banditSpinning,
               })
+              if (decision.local) {
+                // A removal from the Room reached this phone's copy (ADR-0004).
+                state = decision.local
+                if (RoundSession.localOwner != null) {
+                  if (state.round && !state.round.scored) RoundSession.localOwner = state.round.owner
+                  else RoundSession.clearLocal()
+                }
+                saveLocal()
+                schedulePaint({ skipEditor: true })
+              }
               if (decision.action === 'push') {
                 schedulePush({ immediate: true })
                 setSyncStatus('live')
@@ -2530,6 +2874,9 @@
           if (dbUnsub && dbRef) dbRef.off('value', dbUnsub)
           dbUnsub = null
           dbRef = null
+          if (connectedUnsub) connectedRef.off('value', connectedUnsub)
+          connectedUnsub = null
+          evaluateConnection()
           clearTimeout(pushTimer)
           pushTimer = null
           if (paintTimer != null) {
@@ -2591,9 +2938,10 @@
         els.spinBtn.addEventListener('click', spinPlace)
         els.banditBtn.addEventListener('click', spinBandit)
         els.addPlayerBtn.addEventListener('click', function () {
+          if (roomWriteBlocked()) return
           var name = (els.playerInput.value || '').trim()
           if (!name || state.players.length >= 16) return
-          state.players.push({ name: name, score: 0 })
+          state.players.push({ id: uid('pl'), name: name, score: 0 })
           els.playerInput.value = ''
           if (state.players.length === 1) state.activePlayer = 0
           touch()
@@ -2629,6 +2977,7 @@
         document.getElementById('shareFriendsBtn').addEventListener('click', shareFriendsLink)
 
         document.getElementById('addPlaceBtn').addEventListener('click', function () {
+          if (roomWriteBlocked()) return
           var id = uid('place')
           state.destinations.unshift({
             id: id,
@@ -2645,16 +2994,20 @@
         })
 
         document.getElementById('scoreClearBtn').addEventListener('click', scoreClear)
+        els.roundResetBtn.addEventListener('click', resetStuckRound)
         document.getElementById('gameRestartBtn').addEventListener('click', gameRestart)
 
         els.editorList.addEventListener('change', function (e) {
           var t = e.target
           var block = t.closest('.place-block')
           if (!block) return
-          var di = parseInt(block.getAttribute('data-di'), 10)
-          var d = state.destinations[di]
+          var d = state.destinations[placeIndexOfBlock(block)]
           if (!d) return
           var field = t.getAttribute('data-field')
+          if (field === 'label' && roomWriteBlocked()) {
+            t.value = d.label
+            return
+          }
           if (field === 'label') {
             d.label = String(t.value || 'МЕСТО').slice(0, 16).toUpperCase()
             t.value = d.label
@@ -2664,14 +3017,25 @@
           }
         })
 
+        // Bring a kept (possibly lagging) Place block up to date once editing ends.
+        els.editorList.addEventListener('focusout', function () {
+          if (!editorKeptStale) return
+          setTimeout(function () {
+            var active = document.activeElement
+            if (active && els.editorList.contains(active) && /^(INPUT|TEXTAREA)$/.test(active.tagName)) return
+            if (editorKeptStale) renderEditor()
+          }, 300)
+        })
+
         els.editorList.addEventListener('click', function (e) {
           var t = e.target
           if (!t.getAttribute) return
           var block = t.closest('.place-block')
           if (!block) return
-          var di = parseInt(block.getAttribute('data-di'), 10)
+          var di = placeIndexOfBlock(block)
           var d = state.destinations[di]
           if (!d) return
+          if (t.closest('button') && roomWriteBlocked()) return
           if (!state.challenges[d.id]) state.challenges[d.id] = []
 
           if (t.getAttribute('data-del-place') != null) {
@@ -2688,6 +3052,13 @@
           }
           if (t.getAttribute('data-del-chal') != null) {
             var idx = parseInt(t.getAttribute('data-del-chal'), 10)
+            // A lagging block may show an older list: delete by the text the row shows.
+            var shown = t.parentNode.querySelector('span')
+            var text = shown ? shown.textContent : null
+            if (text != null && state.challenges[d.id][idx] !== text) {
+              idx = state.challenges[d.id].indexOf(text)
+            }
+            if (idx < 0) return
             state.challenges[d.id].splice(idx, 1)
             touch()
             refreshBanditIfCurrentPlace(d.id)
@@ -2728,6 +3099,8 @@
               richness: RoomState.richness(state),
               spinning: spinning,
               banditSpinning: banditSpinning,
+              // No connection to the Room: Room changes are blocked on this phone.
+              roomOffline: roomOffline,
               // Control clarity observables for Turn Player / Round Owner UX.
               spinAvailable: spinIsAvailable(),
               scoreActionsVisible: scoreActionsAreVisible(),
@@ -2749,7 +3122,10 @@
           }
         } catch (e) {}
 
+        window.addEventListener('online', evaluateConnection)
+        window.addEventListener('offline', evaluateConnection)
         renderAll()
+        watchRoundStall()
         tryBootFromHash()
         if (!dbRef) tryBootSavedSync()
         if (!dbRef) {

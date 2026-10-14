@@ -3,21 +3,21 @@
  * Seam: window.Malchishnik.query + Playwright multi-context (+ Firebase room read).
  */
 import { chromium } from 'playwright'
-import fs from 'fs'
 import {
+  artifactDir,
   chromePath,
   ensurePlayers,
   gameQuery,
+  qaBase,
   resetGame,
   roomUrl,
   waitForGame,
   waitSpinSettled,
 } from './qa-lib.mjs'
 
-const BASE = process.env.QA_URL || process.env.BASE || 'https://zovminga.github.io/malchishnik-spin/'
+const BASE = qaBase()
 const DB = 'https://malchishnikspin-default-rtdb.firebaseio.com'
-const OUT = process.env.QA_OUT || '/opt/cursor/artifacts/qa'
-fs.mkdirSync(OUT, { recursive: true })
+const OUT = artifactDir('qa-dual-spin')
 
 function roomIdFromUrl(url) {
   try {
