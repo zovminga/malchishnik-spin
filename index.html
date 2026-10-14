@@ -888,8 +888,12 @@
         var rotation = 0
         var spinning = false
         var banditSpinning = false
-        // Round Session fields (locality: ownership/openness live here, not as free globals).
-        // Wire shape of state.round is unchanged; localOwner/localScored keep mid-sync priority.
+        // -------------------------------------------------------------------------
+        // Seam: RoundSession — local guards for the open Round (ADR-0003).
+        // Wire shape stays on state.round; localOwner / localScored keep mid-sync
+        // priority so Round Owner and score-once do not jump under remote apply.
+        // Round Owner ≠ Turn Player (activePlayer is the Turn Player code field).
+        // -------------------------------------------------------------------------
         var RoundSession = {
           place: null,
           challenge: null,
@@ -946,22 +950,7 @@
           return (prefix || 'p') + Math.random().toString(36).slice(2, 8)
         }
 
-        function defaultState() {
-          return {
-            destinations: JSON.parse(JSON.stringify(DEFAULT_DESTINATIONS)),
-            challenges: JSON.parse(JSON.stringify(DEFAULT_CHALLENGES)),
-            players: [],
-            activePlayer: 0,
-            // Общий раунд на всех устройствах: кто крутил и зачтены ли очки.
-            round: null,
-            history: [],
-            // Пустой локальный state не должен быть «новее» комнаты по часам —
-            // иначе свежий браузер затирает чужие очки (см. scripts/repro-score-wipe.mjs).
-            updatedAt: 1,
-            updatedBy: clientId,
-          }
-        }
-
+        // Shared Round wire shape: Round Owner index, Place, Challenge, scored, token.
         RoundSession.empty = function (owner) {
           return {
             owner: Math.max(0, Number(owner) || 0),
@@ -974,9 +963,9 @@
           }
         }
 
+        // Prefer local Round Owner while this phone still owns an unscored Round;
+        // otherwise shared state.round.owner; else Turn Player (activePlayer).
         RoundSession.ownerIndex = function () {
-          // Локальный владелец спина важнее синка: иначе UI показывает одного,
-          // а очки уходят другому после затирания state.round.
           if (
             !RoundSession.localScored &&
             RoundSession.localOwner != null &&
@@ -990,6 +979,7 @@
           return state.activePlayer
         }
 
+        // Open Round: local guards or shared unscored state.round (at most one per Room).
         RoundSession.isOpen = function () {
           if (!RoundSession.localScored && RoundSession.localOwner != null) return true
           return !!(state.round && !state.round.scored)
@@ -1002,6 +992,7 @@
           RoundSession.localScored = false
         }
 
+        // Open a Round for the given Round Owner (usually the current Turn Player).
         RoundSession.open = function (ownerIdx) {
           state.round = RoundSession.empty(ownerIdx)
           RoundSession.localOwner = state.round.owner
@@ -1010,7 +1001,7 @@
           RoundSession.localScored = false
         }
 
-        // Thin aliases — same interface for existing call sites during deepening.
+        // Thin aliases — call sites read RoundSession through these names.
         function emptyRound(owner) {
           return RoundSession.empty(owner)
         }
@@ -1042,6 +1033,27 @@
           if (!spinning) {
             els.spinBtn.disabled = false
             els.spinBtn.textContent = 'КРУТИТЬ · ' + name + '!!!'
+          }
+        }
+
+        // -------------------------------------------------------------------------
+        // Seam: RoomState — Room wire shape and Night Progress (ADR-0001).
+        // default / normalize / richness (code name for Night Progress score).
+        // Inputs: night log (history), players, total scores — not last-write-wins.
+        // -------------------------------------------------------------------------
+        function defaultState() {
+          return {
+            destinations: JSON.parse(JSON.stringify(DEFAULT_DESTINATIONS)),
+            challenges: JSON.parse(JSON.stringify(DEFAULT_CHALLENGES)),
+            players: [],
+            // Turn Player index when no Round is open (code field: activePlayer).
+            activePlayer: 0,
+            // Shared open Round for the Room: Round Owner + scored flag (ADR-0003).
+            round: null,
+            history: [],
+            // Empty local clocks must not outrank the Room — see scripts/repro-score-wipe.mjs.
+            updatedAt: 1,
+            updatedBy: clientId,
           }
         }
 
@@ -1097,9 +1109,25 @@
           return base
         }
 
+        // Night Progress numeric score (history length, players, total scores).
+        function stateRichness(s) {
+          if (!s) return 0
+          var scoreSum = 0
+          var players = s.players || []
+          for (var i = 0; i < players.length; i++) scoreSum += Number(players[i].score) || 0
+          return (s.history || []).length * 100 + players.length * 10 + scoreSum
+        }
+
+        var RoomState = {
+          default: defaultState,
+          normalize: normalizeState,
+          richness: stateRichness,
+        }
+
         function loadLocalState() {
           try {
             var raw = localStorage.getItem(LOCAL_KEY)
+            // Hoisted helpers — safe at boot; RoomState also exposes the same pair.
             if (raw) return normalizeState(JSON.parse(raw))
           } catch (e) {}
           return defaultState()
@@ -1291,22 +1319,11 @@
           els.scoreActions.removeAttribute('hidden')
         }
 
-        function stateRichness(s) {
-          if (!s) return 0
-          var scoreSum = 0
-          var players = s.players || []
-          for (var i = 0; i < players.length; i++) scoreSum += Number(players[i].score) || 0
-          return (s.history || []).length * 100 + players.length * 10 + scoreSum
-        }
-
-        // Deep modules: RoomState owns wire shape; MergePolicy owns accept/write.
+        // -------------------------------------------------------------------------
+        // Seam: MergePolicy — write gate + remote decide for the Room (ADR-0001).
+        // Fuller Night Progress wins; open Round token defended until scored.
         // Firebase I/O stays a thin adapter that calls these interfaces.
-        var RoomState = {
-          default: defaultState,
-          normalize: normalizeState,
-          richness: stateRichness,
-        }
-
+        // -------------------------------------------------------------------------
         var MergePolicy = {
           // Transaction: return value to write, or undefined to abort.
           shouldWrite: function (current, toWrite, writerId) {
@@ -1314,7 +1331,7 @@
             var cur = RoomState.normalize(current)
             var remoteR = RoomState.richness(cur)
             var localR = RoomState.richness(toWrite)
-            // Никогда не затираем более богатую комнату более пустой.
+            // Never overwrite a Room with more Night Progress using a thinner copy.
             if (remoteR > localR) return
             if (
               cur.updatedAt > toWrite.updatedAt &&
@@ -1336,6 +1353,7 @@
             }
             var next = RoomState.normalize(remote)
             if (next.updatedAt < local.updatedAt && next.updatedBy !== writerId) {
+              // Older clock still wins when it carries more Night Progress.
               if (RoomState.richness(next) > RoomState.richness(local)) {
                 return { action: 'apply', state: next }
               }
@@ -1344,6 +1362,7 @@
             if (next.updatedAt === local.updatedAt && next.updatedBy === local.updatedBy) {
               return { action: 'ignore' }
             }
+            // Defend this phone's open Round token against a competing spin.
             if (
               !ctx.scoredThisRound &&
               local.round &&
@@ -1353,6 +1372,7 @@
             ) {
               return { action: 'push' }
             }
+            // Mid-animation: ignore thinner remotes so Round Owner UI does not jump.
             if ((ctx.spinning || ctx.banditSpinning) && !(next.round && next.round.scored)) {
               return { action: 'ignore' }
             }
@@ -1362,8 +1382,8 @@
 
         function schedulePush(opts) {
           if (applyingRemote) return
-          // До первого снимка комнаты не трогаем updatedAt — иначе пустой
-          // локальный state становится «новее» серверного и потом затирает очки.
+          // Before the first Room snapshot, do not bump updatedAt — empty local
+          // must not look newer than the server and wipe Night Progress.
           if (dbRef && !syncReady) {
             saveLocal()
             return
@@ -1684,6 +1704,7 @@
           }
         }
 
+        // Mirror shared Round onto RoundSession local guards (Round Owner, Place, Challenge).
         function applyRoundUiFromState() {
           if (!state.round) {
             RoundSession.localOwner = null
@@ -1794,7 +1815,7 @@
             return
           }
           spinning = true
-          // Владелец раунда пишется в общий state — на всех телефонах один и тот же.
+          // Record Round Owner on the shared Room so every phone sees the same Round.
           RoundSession.open(state.activePlayer)
           els.spinBtn.disabled = true
           els.spinBtn.textContent = 'КРУТИТСЯ!!!'
@@ -1827,7 +1848,7 @@
             spinning = false
             els.spinBtn.disabled = false
             els.spinBtn.textContent = 'КРУТИТЬ МЕСТО!!!'
-            // Если раунд уже закрыли с другого телефона — не перетираем.
+            // If the Round was already scored on another phone, do not overwrite it.
             if (state.round && state.round.scored) {
               applyRoundUiFromState()
               renderPlayers()
@@ -1928,14 +1949,13 @@
             dbUnsub = function (snap) {
               var remote = snap.val()
 
-              // Первый заход: всегда берём комнату с сервера, если она есть.
-              // Если снимок null — НЕ сидим пустым state (часто это гонка).
-              // Ждём следующий value или первое действие пользователя.
+              // First Room snapshot: always take the server Room when present.
+              // Null snapshot — do not seed empty state (race); wait for next value.
               if (!sawRemoteOnce) {
                 sawRemoteOnce = true
                 if (remote) {
                   applyingRemote = true
-                  state = normalizeState(remote)
+                  state = RoomState.normalize(remote)
                   saveLocal()
                   applyRoundUiFromState()
                   if (paintTimer != null) {
@@ -2039,7 +2059,7 @@
             var payload = JSON.parse(decodeURIComponent(escape(atob(hash.slice(6)))))
             if (payload.state) {
               applyingRemote = true
-              state = normalizeState(payload.state)
+              state = RoomState.normalize(payload.state)
               saveLocal()
               applyingRemote = false
             }
@@ -2055,7 +2075,7 @@
           try {
             var sync = JSON.parse(localStorage.getItem(SYNC_KEY) || 'null')
             if (sync && sync.config) {
-              // ?room= в URL важнее сохранённой комнаты — для тестов и отдельных игр.
+              // ?room= isolates test Rooms (ADR-0002); party share omits it.
               var room = DEFAULT_ROOM || sync.room || 'malchishnik'
               els.firebaseConfigInput.value = JSON.stringify(sync.config, null, 2)
               els.roomInput.value = room
@@ -2180,7 +2200,8 @@
           }
         })
 
-        // Read-only test seam — additive; DOM copy stays the UX surface.
+        // Game facade → window.Malchishnik (Playwright test seam).
+        // Exposes Round openness, Turn Player / Round Owner via turnOwner*, Night Progress via richness.
         var Game = {
           query: function () {
             var buildEl = document.getElementById('buildTag')
@@ -2209,7 +2230,7 @@
           },
         }
         try {
-          // QA seam: scripts assert via query/richness, not Russian DOM copy.
+          // QA seam: scripts assert via query / richness, not Russian DOM copy.
           window.Malchishnik = {
             query: Game.query,
             isSpinSettled: Game.isSpinSettled,
