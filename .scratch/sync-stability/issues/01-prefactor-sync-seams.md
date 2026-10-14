@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-- [ ] RoomState, MergePolicy, and RoundSession are clearly named and separated as seams inside the single ship artifact (no bundler / multi-file runtime split)
-- [ ] Glossary terms (Room, Round, Round Owner, Turn Player, Night Progress) are used consistently in comments around those seams
-- [ ] `Malchishnik.query` (and helpers QA already uses) still expose the same observable game facts
-- [ ] `npm run test:wipe` and `npm run test:qa` pass
+- [x] RoomState, MergePolicy, and RoundSession are clearly named and separated as seams inside the single ship artifact (no bundler / multi-file runtime split)
+- [x] Glossary terms (Room, Round, Round Owner, Turn Player, Night Progress) are used consistently in comments around those seams
+- [x] `Malchishnik.query` (and helpers QA already uses) still expose the same observable game facts
+- [x] `npm run test:wipe` and `npm run test:qa` pass
