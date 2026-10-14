@@ -905,7 +905,7 @@
           <button type="button" id="gameRestartBtn">Перезапустить игру</button>
         </div>
         <div class="footer-tools">
-          <span id="buildTag">build 26</span>
+          <span id="buildTag">build 27</span>
         </div>
       </footer>
     </div>
@@ -1679,11 +1679,35 @@
         // (ADR-0001) and open Round token defense (ADR-0003).
         // Firebase I/O stays a thin adapter that calls these interfaces.
         // -------------------------------------------------------------------------
+        function cloneRoom(s) {
+          return JSON.parse(JSON.stringify(s))
+        }
+
         var MergePolicy = {
           // Transaction: return value to write, or undefined to abort.
+          // Removed Players (ADR-0004) are dropped from both copies first, so Night Progress
+          // is compared without them and a copy that still has them cannot bring them back.
           shouldWrite: function (current, toWrite, writerId) {
             if (current === null) return toWrite
             var cur = RoomState.normalize(current)
+            var removed = RoomState.mergeRemovedPlayers(cur.removedPlayers, toWrite.removedPlayers)
+            var write = cloneRoom(toWrite)
+            write.removedPlayers = removed
+            RoomState.dropRemovedPlayers(write, removed)
+            var curView = cloneRoom(cur)
+            curView.removedPlayers = removed
+            RoomState.dropRemovedPlayers(curView, removed)
+            var accepted = MergePolicy.decideWrite(curView, write, writerId)
+            if (accepted) return accepted
+            // Rejected copy still carries a removal the Room lacks: write only the removal.
+            if (removed.length > cur.removedPlayers.length) {
+              curView.updatedAt = Math.max(cur.updatedAt, Number(write.updatedAt) || 0)
+              curView.updatedBy = writerId
+              return curView
+            }
+          },
+          // Whole-copy write gate on Room copies already cleared of removed Players.
+          decideWrite: function (cur, toWrite, writerId) {
             var curGen = Number(cur.roomGeneration) || 0
             var writeGen = Number(toWrite.roomGeneration) || 0
             // Score Clear / Game Restart: higher Room Generation always sticks.
@@ -1732,11 +1756,24 @@
           decideRemote: function (ctx) {
             var remote = ctx.remote
             var local = ctx.local
-            var writerId = ctx.clientId
             if (!remote) {
               return RoomState.richness(local) > 0 ? { action: 'push' } : { action: 'ignore' }
             }
             var next = RoomState.normalize(remote)
+            // Removals from either copy apply to both before anything is compared (ADR-0004).
+            var removed = RoomState.mergeRemovedPlayers(local.removedPlayers, next.removedPlayers)
+            next.removedPlayers = removed
+            RoomState.dropRemovedPlayers(next, removed)
+            local = cloneRoom(local)
+            local.removedPlayers = removed
+            var dropped = RoomState.dropRemovedPlayers(local, removed)
+            var decision = MergePolicy.decideMerge(ctx, next, local)
+            // Local copy lost removed Players: the adapter adopts it before push / ignore.
+            if (dropped && decision.action !== 'apply') decision.local = local
+            return decision
+          },
+          decideMerge: function (ctx, next, local) {
+            var writerId = ctx.clientId
             var localGen = Number(local.roomGeneration) || 0
             var nextGen = Number(next.roomGeneration) || 0
             // ADR-0005: higher Room Generation always applies / pushes, even if thinner.
@@ -2725,6 +2762,16 @@
                 spinning: spinning,
                 banditSpinning: banditSpinning,
               })
+              if (decision.local) {
+                // A removal from the Room reached this phone's copy (ADR-0004).
+                state = decision.local
+                if (RoundSession.localOwner != null) {
+                  if (state.round && !state.round.scored) RoundSession.localOwner = state.round.owner
+                  else RoundSession.clearLocal()
+                }
+                saveLocal()
+                schedulePaint({ skipEditor: true })
+              }
               if (decision.action === 'push') {
                 schedulePush({ immediate: true })
                 setSyncStatus('live')
