@@ -91,8 +91,8 @@ async function main() {
       const ok =
         q.groomSaluteActive === true &&
         Number(q.groomSaluteFires || 0) > 0 &&
-        stickers.length >= 12 &&
-        stickers.length <= 20 &&
+        stickers.length >= 8 &&
+        stickers.length <= 12 &&
         kinds.includes('football') &&
         kinds.includes('zvyrk') &&
         kinds.includes('jesus')
@@ -139,8 +139,8 @@ async function main() {
   )
   log(
     'Sticker burst mix and count',
-    stickerInfo.count >= 12 &&
-      stickerInfo.count <= 20 &&
+    stickerInfo.count >= 8 &&
+      stickerInfo.count <= 12 &&
       ['football', 'zvyrk', 'jesus'].every((k) => stickerInfo.kinds.includes(k)),
     `${stickerInfo.count} pcs kinds=${stickerInfo.kinds.join(',')}`,
   )
