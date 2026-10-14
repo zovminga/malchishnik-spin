@@ -58,28 +58,30 @@
         padding: 0.5rem 0.75rem 1.5rem;
         padding-bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));
       }
+      /* JACKPOT: word only — no full-screen paint; fireworks are the Groom Salute. */
       .page.flash::after {
         content: '★ ДЖЕКПОТ ★';
         position: fixed;
-        inset: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: clamp(2rem, 10vw, 4rem);
+        left: 50%;
+        top: 42%;
+        transform: translate(-50%, -50%);
+        margin: 0;
+        padding: 0.15em 0.35em;
+        display: block;
+        font-size: clamp(2.6rem, 14vw, 5.5rem);
         font-weight: 900;
-        color: #000;
-        background: repeating-linear-gradient(
-          45deg,
-          var(--gold),
-          var(--gold) 20px,
-          var(--pink) 20px,
-          var(--pink) 40px,
-          var(--cyan) 40px,
-          var(--cyan) 60px
-        );
-        animation: flash-banner 0.85s steps(3) forwards;
-        z-index: 10;
+        letter-spacing: 0.04em;
+        color: var(--gold);
+        text-shadow:
+          0 0 0.08em #fff,
+          0 0 0.35em var(--pink),
+          0 0 0.7em var(--cyan),
+          0 3px 0 #1a0010;
+        background: none;
+        animation: flash-banner 1s ease-out forwards;
+        z-index: 12;
         pointer-events: none;
+        white-space: nowrap;
       }
       .sync-bar {
         width: min(100%, 27rem);
@@ -634,15 +636,21 @@
         height: 9px;
         animation: spark 0.85s ease-out forwards;
       }
-      /* Groom Salute sticker confetti (JACKPOT / spin-settle only). */
+      /* Groom Salute: big full-viewport stickers, transparent assets (no black plate). */
       .groom-sticker {
         position: absolute;
-        width: 2.6rem;
-        height: 2.6rem;
-        object-fit: cover;
-        border-radius: 0.35rem;
-        animation: groom-salute 1s ease-out forwards;
+        width: min(52vmin, 48vw);
+        height: min(52vmin, 48vw);
+        max-width: 18rem;
+        max-height: 18rem;
+        object-fit: contain;
+        background: transparent;
+        border: 0;
+        border-radius: 0;
+        box-shadow: none;
+        animation: groom-salute 1.15s ease-out forwards;
         will-change: transform, opacity;
+        z-index: 11;
       }
       @media (prefers-reduced-motion: reduce) {
         .groom-sticker {
@@ -682,12 +690,21 @@
         }
       }
       @keyframes flash-banner {
-        0%,
-        40% {
+        0% {
           opacity: 1;
+          transform: translate(-50%, -50%) scale(0.7);
+        }
+        25% {
+          opacity: 1;
+          transform: translate(-50%, -50%) scale(1.12);
+        }
+        70% {
+          opacity: 1;
+          transform: translate(-50%, -50%) scale(1);
         }
         100% {
           opacity: 0;
+          transform: translate(-50%, -50%) scale(1.05);
         }
       }
       @keyframes spark {
@@ -697,8 +714,16 @@
         }
       }
       @keyframes groom-salute {
+        0% {
+          transform: translate(-50%, -50%) scale(0.55) rotate(0deg);
+          opacity: 1;
+        }
+        20% {
+          opacity: 1;
+        }
         to {
-          transform: translate(var(--dx), var(--dy)) rotate(var(--rot, 0deg)) scale(0.35);
+          transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) rotate(var(--rot, 0deg))
+            scale(1.05);
           opacity: 0;
         }
       }
@@ -801,7 +826,7 @@
       <footer class="footer">
         <p>Одна ссылка — одна игра на всех.</p>
         <div class="footer-tools">
-          <span id="buildTag">build 18</span>
+          <span id="buildTag">build 19</span>
           <button type="button" id="hardResetBtn">сброс кэша</button>
         </div>
       </footer>
@@ -943,11 +968,11 @@
         var SPIN_MS = 5600
         var BANDIT_MS = 2800
         var MIN_TURNS = 7
-        var GROOM_SALUTE_MS = 1000
+        var GROOM_SALUTE_MS = 1150
         var GROOM_STICKERS = [
           { id: 'football', src: 'assets/groom-salute/football.png' },
-          { id: 'zvyrk', src: 'assets/groom-salute/zvyrk-cat.jpg' },
-          { id: 'jesus', src: 'assets/groom-salute/jesus.jpg' },
+          { id: 'zvyrk', src: 'assets/groom-salute/zvyrk-cat.png' },
+          { id: 'jesus', src: 'assets/groom-salute/jesus.png' },
         ]
         var rotation = 0
         var spinning = false
@@ -1913,6 +1938,9 @@
             pack[i] = pack[j]
             pack[j] = tmp
           }
+          var vw = Math.max(window.innerWidth || 320, 320)
+          var vh = Math.max(window.innerHeight || 480, 480)
+          var reach = Math.max(vw, vh) * 0.55
           for (var s = 0; s < pack.length; s++) {
             var sticker = pack[s]
             var img = document.createElement('img')
@@ -1922,12 +1950,18 @@
             img.alt = ''
             img.setAttribute('aria-hidden', 'true')
             var ang = Math.random() * Math.PI * 2
-            var dist = 80 + Math.random() * 200
+            var dist = reach * (0.55 + Math.random() * 0.7)
             img.style.left = '50%'
-            img.style.top = '38%'
+            img.style.top = '45%'
             img.style.setProperty('--dx', Math.cos(ang) * dist + 'px')
             img.style.setProperty('--dy', Math.sin(ang) * dist + 'px')
             img.style.setProperty('--rot', Math.floor(Math.random() * 720 - 360) + 'deg')
+            // Slight size jitter so the fireworks fill the screen unevenly.
+            var size = 38 + Math.floor(Math.random() * 28) // 38–65 vmin-ish via inline
+            img.style.width = size + 'vmin'
+            img.style.height = size + 'vmin'
+            img.style.maxWidth = 'none'
+            img.style.maxHeight = 'none'
             els.fx.appendChild(img)
           }
           groomSaluteTimer = setTimeout(function () {
