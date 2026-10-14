@@ -743,7 +743,7 @@
       <footer class="footer">
         <p>Одна ссылка — одна игра на всех.</p>
         <div class="footer-tools">
-          <span id="buildTag">build 16</span>
+          <span id="buildTag">build 17</span>
           <button type="button" id="hardResetBtn">сброс кэша</button>
         </div>
       </footer>
@@ -1022,7 +1022,9 @@
           els.banditBox.classList.remove('show')
           els.challengeOut.textContent = ''
           RoundSession.clearLocal()
-          state.round = null
+          // Keep scored Round on the wire (ADR-0003): peers must see scored=true so a
+          // second done/fail cannot award again and open-Round defense cannot overwrite it.
+          if (state.round) state.round.scored = true
           var name = ownerName(nextIdx)
           els.result.innerHTML =
             '<p class="result-kicker">★★ ХОД ПЕРЕХОДИТ ★★</p><p class="result-label" style="color:var(--lime)">' +
@@ -1352,6 +1354,19 @@
             ) {
               return
             }
+            // First successful award for a Round token wins — reject a second score write
+            // that does not add Night Progress (dual done/fail race).
+            if (
+              cur.round &&
+              cur.round.scored &&
+              cur.round.token &&
+              toWrite.round &&
+              toWrite.round.scored &&
+              toWrite.round.token === cur.round.token &&
+              localR <= remoteR
+            ) {
+              return
+            }
             return toWrite
           },
           // on('value') after first snapshot: decide apply / push / ignore.
@@ -1378,6 +1393,17 @@
             ) {
               return { action: 'apply', state: next }
             }
+            // Remote already awarded this Round — take it (do not defend open Round over a score).
+            if (
+              local.round &&
+              !local.round.scored &&
+              local.round.token &&
+              next.round &&
+              next.round.scored &&
+              next.round.token === local.round.token
+            ) {
+              return { action: 'apply', state: next }
+            }
             if (next.updatedAt < local.updatedAt && next.updatedBy !== writerId) {
               // Older clock still wins when it carries more Night Progress.
               if (RoomState.richness(next) > RoomState.richness(local)) {
@@ -1389,6 +1415,8 @@
               return { action: 'ignore' }
             }
             // Defend this phone's open Round against wipe / empty join (ADR-0003).
+            // Do not defend against a missing round here when Night Progress is richer —
+            // award path keeps scored=true on the wire so peers apply via the branch above.
             if (
               !ctx.scoredThisRound &&
               local.round &&
@@ -1733,7 +1761,10 @@
         // Mirror shared Round onto RoundSession local guards (Round Owner, Place, Challenge).
         function applyRoundUiFromState() {
           if (!state.round) {
-            RoundSession.localOwner = null
+            // Idle / reset Room: drop local Place so stale done/fail cannot fire.
+            RoundSession.clearLocal()
+            els.scoreActions.hidden = true
+            els.scoreActions.setAttribute('hidden', '')
             return
           }
           RoundSession.localOwner = state.round.owner
@@ -1747,7 +1778,12 @@
             }
           }
           if (state.round.challenge != null) RoundSession.challenge = state.round.challenge
-          if (state.round.scored) lockRoundAfterScore()
+          if (state.round.scored) {
+            // Scored Round is closed: drop local Place so done/fail cannot fire again.
+            RoundSession.place = null
+            RoundSession.challenge = null
+            lockRoundAfterScore()
+          }
         }
 
         function setupBandit(dest) {
