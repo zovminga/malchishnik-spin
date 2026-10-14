@@ -21,12 +21,12 @@ The open stretch after a spin lands until points for that spin are awarded.
 _Avoid_: Turn (for this meaning), spin result window
 
 **Round Owner**:
-The player who spun this Round and who alone receives its points.
-_Avoid_: Active player (for this meaning), spinner (unless speaking casually)
+The player who spun this Round and who alone receives its points. Not the same idea as Turn Player.
+_Avoid_: Active player (for this meaning), «чей ход», spinner (unless speaking casually)
 
 **Turn Player**:
-Whose turn it is to spin when there is no open Round.
-_Avoid_: Round Owner, activePlayer (code name)
+Whose turn it is to spin when there is no open Round. Not the same idea as Round Owner.
+_Avoid_: Round Owner, «кому очки», activePlayer (code name)
 
 **Night Progress**:
 How far a Room has gotten — history, players, and scores. When two versions of a Room conflict, the one with more Night Progress wins.
