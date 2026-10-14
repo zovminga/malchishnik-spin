@@ -4,10 +4,10 @@
 
 **Blocked by:** 01 — Prefactor sync seams; 02 — One open Round (dual spin)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Joining mid-Round does not drop Night Progress (scores / night log / players)
-- [ ] Open Round and Round Owner remain visible/consistent after the join
-- [ ] Empty local state on the joiner does not overwrite the fuller Room
-- [ ] Playwright test: third client joins during open Round — Night Progress and Round Owner preserved
-- [ ] Existing wipe and QA suites still pass; race scripts from 02/03 remain green
+- [x] Joining mid-Round does not drop Night Progress (scores / night log / players)
+- [x] Open Round and Round Owner remain visible/consistent after the join
+- [x] Empty local state on the joiner does not overwrite the fuller Room
+- [x] Playwright test: third client joins during open Round — Night Progress and Round Owner preserved
+- [x] Existing wipe and QA suites still pass; race scripts from 02/03 remain green
