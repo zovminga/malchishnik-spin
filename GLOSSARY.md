@@ -37,7 +37,7 @@ Someone on the Room roster with a display name and a running score. Adding and r
 _Avoid_: Participant, member, guest (for the roster seat), участник (UI may say «игроки»)
 
 **Night Progress**:
-How “full” a Room already is: entries in the night log, Players on the list, and total scores. When Room Generation matches, a fuller Room beats a emptier one — so a fresh phone with almost nothing does not wipe the party. Removing a Player can thin Night Progress, so another phone’s fuller copy may put them back.
+How “full” a Room already is: entries in the night log, Players on the list, and total scores. When Room Generation matches, a fuller Room beats a emptier one — so a fresh phone with almost nothing does not wipe the party. A removed Player stays removed on every phone: Night Progress is compared only after removed Players are dropped.
 _Avoid_: Richness (code name), freshness, latest write, «кто последний сохранил»
 
 **Room Generation**:
