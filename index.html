@@ -743,7 +743,7 @@
       <footer class="footer">
         <p>Одна ссылка — одна игра на всех.</p>
         <div class="footer-tools">
-          <span id="buildTag">build 15</span>
+          <span id="buildTag">build 16</span>
           <button type="button" id="hardResetBtn">сброс кэша</button>
         </div>
       </footer>
@@ -1340,6 +1340,18 @@
             ) {
               return
             }
+            // At most one open Round per Room (ADR-0003): first open Round token wins.
+            if (
+              cur.round &&
+              !cur.round.scored &&
+              cur.round.token &&
+              toWrite.round &&
+              !toWrite.round.scored &&
+              toWrite.round.token &&
+              toWrite.round.token !== cur.round.token
+            ) {
+              return
+            }
             return toWrite
           },
           // on('value') after first snapshot: decide apply / push / ignore.
@@ -1352,6 +1364,20 @@
               return RoomState.richness(local) > 0 ? { action: 'push' } : { action: 'ignore' }
             }
             var next = RoomState.normalize(remote)
+            // Competing open Rounds: adopt the Room copy even when local clock is newer.
+            // shouldWrite already rejected the losing spin; pushing would fork forever.
+            if (
+              !ctx.scoredThisRound &&
+              local.round &&
+              !local.round.scored &&
+              local.round.token &&
+              next.round &&
+              !next.round.scored &&
+              next.round.token &&
+              next.round.token !== local.round.token
+            ) {
+              return { action: 'apply', state: next }
+            }
             if (next.updatedAt < local.updatedAt && next.updatedBy !== writerId) {
               // Older clock still wins when it carries more Night Progress.
               if (RoomState.richness(next) > RoomState.richness(local)) {
@@ -1362,7 +1388,7 @@
             if (next.updatedAt === local.updatedAt && next.updatedBy === local.updatedBy) {
               return { action: 'ignore' }
             }
-            // Defend this phone's open Round token against a competing spin.
+            // Defend this phone's open Round against wipe / empty join (ADR-0003).
             if (
               !ctx.scoredThisRound &&
               local.round &&
@@ -1803,20 +1829,12 @@
             alert('Нет мест на колесе — добавь в редакторе')
             return
           }
-          if (roundIsOpen()) {
-            if (
-              confirm(
-                'Раунд ещё не закрыт (или завис).\nСбросить раунд и крутить заново?',
-              )
-            ) {
-              abortRound(true)
-              touch({ immediate: true })
-            }
-            return
-          }
+          // One open Round per Room — spin is ignored while a Round is already open (ADR-0003).
+          if (roundIsOpen()) return
           spinning = true
           // Record Round Owner on the shared Room so every phone sees the same Round.
           RoundSession.open(state.activePlayer)
+          var spinToken = state.round && state.round.token
           els.spinBtn.disabled = true
           els.spinBtn.textContent = 'КРУТИТСЯ!!!'
           els.banditBox.classList.remove('show')
@@ -1848,8 +1866,12 @@
             spinning = false
             els.spinBtn.disabled = false
             els.spinBtn.textContent = 'КРУТИТЬ МЕСТО!!!'
-            // If the Round was already scored on another phone, do not overwrite it.
-            if (state.round && state.round.scored) {
+            // Lost the dual-spin race, or Round already scored elsewhere — do not overwrite.
+            if (
+              !state.round ||
+              state.round.scored ||
+              (spinToken && state.round.token !== spinToken)
+            ) {
               applyRoundUiFromState()
               renderPlayers()
               return
@@ -1995,6 +2017,11 @@
               applyingRemote = true
               state = decision.state
               saveLocal()
+              // Adopting the Room's Round ends a losing local spin animation.
+              if (spinning && state.round && !state.round.scored) {
+                spinning = false
+                els.spinBtn.disabled = false
+              }
               applyRoundUiFromState()
               if (paintTimer != null) {
                 cancelAnimationFrame(paintTimer)
