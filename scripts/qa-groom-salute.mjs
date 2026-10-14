@@ -91,8 +91,8 @@ async function main() {
       const ok =
         q.groomSaluteActive === true &&
         Number(q.groomSaluteFires || 0) > 0 &&
-        stickers.length >= 8 &&
-        stickers.length <= 12 &&
+        stickers.length >= 10 &&
+        stickers.length <= 14 &&
         kinds.includes('football') &&
         kinds.includes('zvyrk') &&
         kinds.includes('jesus')
@@ -139,8 +139,8 @@ async function main() {
   )
   log(
     'Sticker burst mix and count',
-    stickerInfo.count >= 8 &&
-      stickerInfo.count <= 12 &&
+    stickerInfo.count >= 10 &&
+      stickerInfo.count <= 14 &&
       ['football', 'zvyrk', 'jesus'].every((k) => stickerInfo.kinds.includes(k)),
     `${stickerInfo.count} pcs kinds=${stickerInfo.kinds.join(',')}`,
   )
@@ -155,7 +155,7 @@ async function main() {
     `sparks=${stickerInfo.sparks}`,
   )
 
-  // ~1s lifetime then nodes cleaned up; salute becomes inactive.
+  // ~3s lifetime then nodes cleaned up; salute becomes inactive.
   await page.waitForFunction(
     () => {
       const q = window.Malchishnik.query()
@@ -163,11 +163,11 @@ async function main() {
       return q.groomSaluteActive === false && left === 0
     },
     null,
-    { timeout: 5000 },
+    { timeout: 8000 },
   )
   const after = await gameQuery(page)
   log(
-    'Salute cleaned up after ~1s',
+    'Salute cleaned up after burst',
     after.groomSaluteActive === false && after.groomSaluteFires === firesBefore + 1,
     `active=${after.groomSaluteActive} fires=${after.groomSaluteFires}`,
   )
