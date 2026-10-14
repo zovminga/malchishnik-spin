@@ -74,7 +74,20 @@ export async function ensurePlayers(page, names = ['Azat', 'Alexander']) {
   return gameQuery(page)
 }
 
-export async function resetGame(page) {
-  await page.click('#resetGameBtn')
+/** Click a bottom reset control; scroll + force avoids tall scoreboard hit-test flakes. */
+async function clickResetControl(page, selector) {
+  const btn = page.locator(selector).first()
+  await btn.scrollIntoViewIfNeeded()
+  await btn.click({ force: true })
   await page.waitForTimeout(600)
+}
+
+/** Score Clear via stable control id (ADR-0005). Legacy #resetGameBtn kept as fallback. */
+export async function resetGame(page) {
+  await clickResetControl(page, '#scoreClearBtn, #resetGameBtn')
+}
+
+/** Game Restart via stable control id (ADR-0005). */
+export async function gameRestart(page) {
+  await clickResetControl(page, '#gameRestartBtn')
 }
