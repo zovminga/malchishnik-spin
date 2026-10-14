@@ -801,7 +801,7 @@
       <footer class="footer">
         <p>Одна ссылка — одна игра на всех.</p>
         <div class="footer-tools">
-          <span id="buildTag">build 17</span>
+          <span id="buildTag">build 18</span>
           <button type="button" id="hardResetBtn">сброс кэша</button>
         </div>
       </footer>
@@ -1127,7 +1127,12 @@
           els.spinBtn.removeAttribute('aria-busy')
           if (roundIsOpen()) {
             els.spinBtn.disabled = true
-            els.spinBtn.textContent = 'СНАЧАЛА ОЧКИ'
+            // Open Round with a Place → score first; without Place → someone is still spinning.
+            var hasPlace = !!(
+              (state.round && state.round.placeId) ||
+              (RoundSession.place && RoundSession.place.id)
+            )
+            els.spinBtn.textContent = hasPlace ? 'СНАЧАЛА ОЧКИ' : 'КТО-ТО КРУТИТ…'
             els.spinBtn.setAttribute('data-spin-available', 'false')
             return
           }
@@ -1982,6 +1987,48 @@
           celebrateJackpotLanding(dest)
         }
 
+        function destFromRoundWire(round) {
+          if (!round || !round.placeId) return null
+          for (var i = 0; i < state.destinations.length; i++) {
+            if (state.destinations[i].id === round.placeId) return state.destinations[i]
+          }
+          // Place list may have changed; keep enough to show result + score.
+          return {
+            id: round.placeId,
+            label: round.placeLabel || round.placeId,
+            tagline: '',
+            color: round.placeColor || '#ffe566',
+            text: '#fff',
+          }
+        }
+
+        // Restore bandit / score UI for an open Round (page load or remote apply).
+        // Without this, spin stays on «СНАЧАЛА ОЧКИ» while result still says «Жми кнопку».
+        function restoreOpenRoundUi() {
+          if (!state.round || state.round.scored) {
+            refreshSpinControl()
+            return
+          }
+          if (!state.round.placeId) {
+            if (!spinning) {
+              els.result.innerHTML =
+                '<p class="result-placeholder">Кто-то крутит колесо…</p>'
+            }
+            refreshSpinControl()
+            return
+          }
+          var dest = destFromRoundWire(state.round)
+          if (!dest) {
+            refreshSpinControl()
+            return
+          }
+          RoundSession.place = dest
+          if (state.round.challenge != null) RoundSession.challenge = state.round.challenge
+          paintPlaceResult(dest)
+          setupBandit(dest)
+          refreshSpinControl()
+        }
+
         // Mirror shared Round onto RoundSession local guards (Round Owner, Place, Challenge).
         function applyRoundUiFromState() {
           if (!state.round) {
@@ -1997,12 +2044,7 @@
           RoundSession.localOwner = state.round.owner
           RoundSession.localScored = !!state.round.scored
           if (state.round.placeId) {
-            for (var i = 0; i < state.destinations.length; i++) {
-              if (state.destinations[i].id === state.round.placeId) {
-                RoundSession.place = state.destinations[i]
-                break
-              }
-            }
+            RoundSession.place = destFromRoundWire(state.round)
           }
           if (state.round.challenge != null) RoundSession.challenge = state.round.challenge
           if (state.round.scored) {
@@ -2010,7 +2052,11 @@
             RoundSession.place = null
             RoundSession.challenge = null
             lockRoundAfterScore()
+            refreshSpinControl()
+            return
           }
+          // Open Round: put bandit/score back on screen (especially after refresh / late join).
+          restoreOpenRoundUi()
         }
 
         function setupBandit(dest) {
@@ -2249,15 +2295,17 @@
                   applyingRemote = true
                   state = RoomState.normalize(remote)
                   saveLocal()
-                  applyRoundUiFromState()
                   // Late join: suppress salute for a Place already on the wire.
                   salutedLandingKey = landingSaluteKey(state.round)
+                  applyRoundUiFromState()
                   if (paintTimer != null) {
                     cancelAnimationFrame(paintTimer)
                     paintTimer = null
                   }
                   paintSkipEditor = true
                   renderAll()
+                  // First snapshot used to skip bandit/score restore — spin stuck on «СНАЧАЛА ОЧКИ».
+                  if (state.round && !state.round.scored) restoreOpenRoundUi()
                   applyingRemote = false
                   syncReady = true
                   setSyncStatus('live')
@@ -2294,16 +2342,13 @@
                 spinning = false
               }
               applyRoundUiFromState()
-              refreshSpinControl()
               if (paintTimer != null) {
                 cancelAnimationFrame(paintTimer)
                 paintTimer = null
               }
               paintSkipEditor = true
               renderAll()
-              if (RoundSession.place && !RoundSession.localScored && state.round && !state.round.scored) {
-                setupBandit(RoundSession.place)
-              }
+              if (state.round && !state.round.scored) restoreOpenRoundUi()
               // Watching peers: Groom Salute when shared Round lands a Place (spin-settle).
               maybeSaluteSharedLanding()
               applyingRemote = false
