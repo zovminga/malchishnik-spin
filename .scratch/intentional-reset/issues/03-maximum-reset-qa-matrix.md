@@ -4,7 +4,7 @@
 
 **Blocked by:** 02: Game Restart + reset UI contract
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] Dual Score Clear race → one coherent Room Generation, zeros everywhere, no score bounce
 - [ ] Dual Game Restart race → empty Players everywhere
