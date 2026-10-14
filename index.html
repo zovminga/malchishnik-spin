@@ -743,7 +743,7 @@
       <footer class="footer">
         <p>Одна ссылка — одна игра на всех.</p>
         <div class="footer-tools">
-          <span id="buildTag">build 14</span>
+          <span id="buildTag">build 15</span>
           <button type="button" id="hardResetBtn">сброс кэша</button>
         </div>
       </footer>
@@ -898,6 +898,8 @@
         }
         var applyingRemote = false
         var pushTimer = null
+        var paintTimer = null
+        var paintSkipEditor = true
         var dbRef = null
         var dbUnsub = null
         var firebaseApp = null
@@ -1155,7 +1157,7 @@
           })
           state.history = []
           state.activePlayer = 0
-          touch()
+          touch({ immediate: true })
         }
 
         function hardResetCache() {
@@ -1182,7 +1184,7 @@
           state.activePlayer = 0
           state.round = null
           // Пушим чистый state, потом жёсткий reload.
-          touch()
+          touch({ immediate: true })
           setTimeout(function () {
             location.reload()
           }, 350)
@@ -1358,7 +1360,7 @@
           },
         }
 
-        function schedulePush() {
+        function schedulePush(opts) {
           if (applyingRemote) return
           // До первого снимка комнаты не трогаем updatedAt — иначе пустой
           // локальный state становится «новее» серверного и потом затирает очки.
@@ -1371,7 +1373,10 @@
           saveLocal()
           if (!dbRef) return
           clearTimeout(pushTimer)
+          // Score/spin/round need low latency for other phones; editor edits stay debounced.
+          var delay = opts && opts.immediate ? 0 : 280
           pushTimer = setTimeout(function () {
+            pushTimer = null
             var toWrite = JSON.parse(JSON.stringify(state))
             dbRef
               .transaction(function (current) {
@@ -1380,12 +1385,24 @@
               .catch(function () {
                 setSyncStatus('error', '● Не удалось сохранить общий список')
               })
-          }, 280)
+          }, delay)
         }
 
-        function touch() {
-          schedulePush()
-          renderAll()
+        function schedulePaint(opts) {
+          // Any caller that needs the editor wins over skip-only paints.
+          if (!(opts && opts.skipEditor)) paintSkipEditor = false
+          if (paintTimer != null) return
+          paintTimer = requestAnimationFrame(function () {
+            paintTimer = null
+            var skip = paintSkipEditor
+            paintSkipEditor = true
+            renderAll({ skipEditor: skip })
+          })
+        }
+
+        function touch(opts) {
+          schedulePush(opts)
+          schedulePaint(opts)
         }
 
         function slice() {
@@ -1580,6 +1597,18 @@
         }
 
         function renderEditor() {
+          var active = document.activeElement
+          var restore = null
+          if (active && els.editorList.contains(active) && active.getAttribute) {
+            var block = active.closest('.place-block')
+            restore = {
+              di: block ? block.getAttribute('data-di') : null,
+              field: active.getAttribute('data-field'),
+              addInput: active.getAttribute('data-add-input') != null,
+              start: typeof active.selectionStart === 'number' ? active.selectionStart : null,
+              end: typeof active.selectionEnd === 'number' ? active.selectionEnd : null,
+            }
+          }
           var html = ''
           state.destinations.forEach(function (d, di) {
             var list = state.challenges[d.id] || []
@@ -1610,14 +1639,29 @@
               '<div class="add-row"><input data-add-input maxlength="80" placeholder="Новое задание…" /><button type="button" data-add-chal>Добавить</button></div></div>'
           })
           els.editorList.innerHTML = html || '<p class="empty-chal">Мест нет — добавь хотя бы одно</p>'
+          if (!restore || restore.di == null) return
+          var again = els.editorList.querySelector('.place-block[data-di="' + restore.di + '"]')
+          if (!again) return
+          var focusEl = restore.addInput
+            ? again.querySelector('[data-add-input]')
+            : restore.field
+              ? again.querySelector('[data-field="' + restore.field + '"]')
+              : null
+          if (!focusEl) return
+          focusEl.focus()
+          if (restore.start != null && typeof focusEl.setSelectionRange === 'function') {
+            try {
+              focusEl.setSelectionRange(restore.start, restore.end != null ? restore.end : restore.start)
+            } catch (e) {}
+          }
         }
 
-        function renderAll() {
+        function renderAll(opts) {
           renderTicker()
           renderWheel()
           renderPlayers()
           renderHistory()
-          renderEditor()
+          if (!(opts && opts.skipEditor)) renderEditor()
         }
 
         function burst(color) {
@@ -1724,7 +1768,7 @@
             state.round.scored = false
           }
           setupBandit(dest)
-          touch()
+          touch({ immediate: true })
         }
 
         function spinPlace() {
@@ -1745,7 +1789,7 @@
               )
             ) {
               abortRound(true)
-              touch()
+              touch({ immediate: true })
             }
             return
           }
@@ -1757,7 +1801,7 @@
           els.banditBox.classList.remove('show')
           els.result.innerHTML = '<p class="result-placeholder">Крутится…</p>'
           renderPlayers()
-          touch()
+          touch({ immediate: true, skipEditor: true })
 
           var sl = slice()
           var index = Math.floor(Math.random() * state.destinations.length)
@@ -1823,7 +1867,7 @@
             }
             if (state.round) {
               state.round.challenge = RoundSession.challenge
-              touch()
+              touch({ immediate: true, skipEditor: true })
             }
             els.banditBtn.disabled = false
             els.banditBtn.textContent = 'ДРУГОЕ ЗАДАНИЕ'
@@ -1860,7 +1904,7 @@
           if (state.history.length > 20) state.history.length = 20
           state.activePlayer = patch.nextIdx
           finishRoundUi(patch.nextIdx)
-          touch()
+          touch({ immediate: true })
         }
 
         function connectFirebase(config, room) {
@@ -1894,6 +1938,11 @@
                   state = normalizeState(remote)
                   saveLocal()
                   applyRoundUiFromState()
+                  if (paintTimer != null) {
+                    cancelAnimationFrame(paintTimer)
+                    paintTimer = null
+                  }
+                  paintSkipEditor = true
                   renderAll()
                   applyingRemote = false
                   syncReady = true
@@ -1914,7 +1963,7 @@
                 banditSpinning: banditSpinning,
               })
               if (decision.action === 'push') {
-                schedulePush()
+                schedulePush({ immediate: true })
                 setSyncStatus('live')
                 return
               }
@@ -1927,6 +1976,11 @@
               state = decision.state
               saveLocal()
               applyRoundUiFromState()
+              if (paintTimer != null) {
+                cancelAnimationFrame(paintTimer)
+                paintTimer = null
+              }
+              paintSkipEditor = true
               renderAll()
               if (RoundSession.place && !RoundSession.localScored && state.round && !state.round.scored) {
                 setupBandit(RoundSession.place)
@@ -1953,6 +2007,13 @@
           if (dbUnsub && dbRef) dbRef.off('value', dbUnsub)
           dbUnsub = null
           dbRef = null
+          clearTimeout(pushTimer)
+          pushTimer = null
+          if (paintTimer != null) {
+            cancelAnimationFrame(paintTimer)
+            paintTimer = null
+          }
+          paintSkipEditor = true
           localStorage.removeItem(SYNC_KEY)
           setSyncStatus('local')
         }
@@ -2071,8 +2132,13 @@
           var d = state.destinations[di]
           if (!d) return
           var field = t.getAttribute('data-field')
-          if (field === 'label') d.label = String(t.value || 'МЕСТО').slice(0, 16).toUpperCase()
-          touch()
+          if (field === 'label') {
+            d.label = String(t.value || 'МЕСТО').slice(0, 16).toUpperCase()
+            t.value = d.label
+            // Keep caret; only refresh wheel/ticker (editor DOM stays put).
+            schedulePush()
+            schedulePaint({ skipEditor: true })
+          }
         })
 
         els.editorList.addEventListener('click', function (e) {

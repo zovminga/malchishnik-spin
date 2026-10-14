@@ -11,7 +11,7 @@ import {
   waitSpinSettled,
 } from './qa-lib.mjs'
 
-const BASE = process.env.QA_URL || 'https://zovminga.github.io/malchishnik-spin/'
+const BASE = process.env.QA_URL || process.env.BASE || 'https://zovminga.github.io/malchishnik-spin/'
 const OUT = process.env.QA_OUT || '/opt/cursor/artifacts/qa'
 fs.mkdirSync(OUT, { recursive: true })
 

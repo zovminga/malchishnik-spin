@@ -9,7 +9,7 @@ import {
   waitSpinSettled,
 } from './qa-lib.mjs'
 
-const BASE = process.env.QA_URL || 'https://zovminga.github.io/malchishnik-spin/'
+const BASE = process.env.QA_URL || process.env.BASE || 'https://zovminga.github.io/malchishnik-spin/'
 
 async function scoreCurrent(page) {
   const banditBtn = page.locator('#banditBtn')
