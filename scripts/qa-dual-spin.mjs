@@ -79,7 +79,7 @@ async function main() {
     executablePath: chromePath(),
     args: ['--disable-dev-shm-usage'],
   })
-  // pageB accepts confirms — current stuck-round dialog would abort the open Round (steal).
+  // Mixed dialog modes: late spin must not replace the open Round even if a confirm were shown.
   const pageA = await newPage(browser, 'dismiss')
   const pageB = await newPage(browser, 'accept')
 

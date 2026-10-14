@@ -6,8 +6,8 @@
 
 **Status:** ready-for-agent
 
-- [ ] While a Round is open, a second client cannot replace it with a new spin
-- [ ] Round Owner stays the spinner who opened the Round until award
-- [ ] Spin controls on non-owning / late clients do not create a second open Round
-- [ ] Playwright multi-client test: two clients race spin — only one open Round / Round Owner wins
-- [ ] Existing wipe and QA suites still pass
+- [x] While a Round is open, a second client cannot replace it with a new spin
+- [x] Round Owner stays the spinner who opened the Round until award
+- [x] Spin controls on non-owning / late clients do not create a second open Round
+- [x] Playwright multi-client test: two clients race spin — only one open Round / Round Owner wins
+- [x] Existing wipe and QA suites still pass
