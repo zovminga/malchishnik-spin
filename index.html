@@ -604,6 +604,21 @@
         height: 9px;
         animation: spark 0.85s ease-out forwards;
       }
+      /* Groom Salute sticker confetti (JACKPOT / spin-settle only). */
+      .groom-sticker {
+        position: absolute;
+        width: 2.6rem;
+        height: 2.6rem;
+        object-fit: cover;
+        border-radius: 0.35rem;
+        animation: groom-salute 1s ease-out forwards;
+        will-change: transform, opacity;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .groom-sticker {
+          animation-duration: 0.2s;
+        }
+      }
       @keyframes ticker {
         to {
           transform: translateX(-50%);
@@ -648,6 +663,12 @@
       @keyframes spark {
         to {
           transform: translate(var(--dx), var(--dy)) scale(0);
+          opacity: 0;
+        }
+      }
+      @keyframes groom-salute {
+        to {
+          transform: translate(var(--dx), var(--dy)) rotate(var(--rot, 0deg)) scale(0.35);
           opacity: 0;
         }
       }
@@ -885,9 +906,19 @@
         var SPIN_MS = 5600
         var BANDIT_MS = 2800
         var MIN_TURNS = 7
+        var GROOM_SALUTE_MS = 1000
+        var GROOM_STICKERS = [
+          { id: 'football', src: 'assets/groom-salute/football.png' },
+          { id: 'zvyrk', src: 'assets/groom-salute/zvyrk-cat.jpg' },
+          { id: 'jesus', src: 'assets/groom-salute/jesus.jpg' },
+        ]
         var rotation = 0
         var spinning = false
         var banditSpinning = false
+        // Groom Salute observation (Malchishnik.query): active while particles live.
+        var groomSaluteActive = false
+        var groomSaluteFires = 0
+        var groomSaluteTimer = null
         // -------------------------------------------------------------------------
         // Seam: RoundSession — local guards for the open Round (ADR-0003).
         // Wire shape stays on state.round; localOwner / localScored keep mid-sync
@@ -1758,6 +1789,72 @@
           }
         }
 
+        function prefersReducedMotion() {
+          try {
+            return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)
+          } catch (e) {
+            return false
+          }
+        }
+
+        function clearGroomSaluteNodes() {
+          if (!els.fx) return
+          var nodes = els.fx.querySelectorAll('.groom-sticker')
+          for (var i = 0; i < nodes.length; i++) {
+            if (nodes[i].parentNode) nodes[i].parentNode.removeChild(nodes[i])
+          }
+          groomSaluteActive = false
+          if (groomSaluteTimer) {
+            clearTimeout(groomSaluteTimer)
+            groomSaluteTimer = null
+          }
+        }
+
+        // Groom Salute: short JACKPOT sticker burst (not during the whole spin).
+        function groomSalute() {
+          groomSaluteFires += 1
+          clearGroomSaluteNodes()
+          // Reduced motion: keep JACKPOT banner (caller), skip / shorten particles.
+          if (prefersReducedMotion()) {
+            groomSaluteActive = false
+            return
+          }
+          groomSaluteActive = true
+          var count = 12 + Math.floor(Math.random() * 9) // 12–20
+          var pack = []
+          // Guarantee a mix of football, Zvyrk, and Jesus in every burst.
+          for (var g = 0; g < GROOM_STICKERS.length; g++) pack.push(GROOM_STICKERS[g])
+          while (pack.length < count) {
+            pack.push(GROOM_STICKERS[Math.floor(Math.random() * GROOM_STICKERS.length)])
+          }
+          for (var i = pack.length - 1; i > 0; i--) {
+            var j = Math.floor(Math.random() * (i + 1))
+            var tmp = pack[i]
+            pack[i] = pack[j]
+            pack[j] = tmp
+          }
+          for (var s = 0; s < pack.length; s++) {
+            var sticker = pack[s]
+            var img = document.createElement('img')
+            img.className = 'groom-sticker'
+            img.setAttribute('data-sticker', sticker.id)
+            img.src = sticker.src
+            img.alt = ''
+            img.setAttribute('aria-hidden', 'true')
+            var ang = Math.random() * Math.PI * 2
+            var dist = 80 + Math.random() * 200
+            img.style.left = '50%'
+            img.style.top = '38%'
+            img.style.setProperty('--dx', Math.cos(ang) * dist + 'px')
+            img.style.setProperty('--dy', Math.sin(ang) * dist + 'px')
+            img.style.setProperty('--rot', Math.floor(Math.random() * 720 - 360) + 'deg')
+            els.fx.appendChild(img)
+          }
+          groomSaluteTimer = setTimeout(function () {
+            clearGroomSaluteNodes()
+          }, GROOM_SALUTE_MS)
+        }
+
         // Mirror shared Round onto RoundSession local guards (Round Owner, Place, Challenge).
         function applyRoundUiFromState() {
           if (!state.round) {
@@ -1842,7 +1939,8 @@
           els.page.classList.remove('flash')
           void els.page.offsetWidth
           els.page.classList.add('flash')
-          burst(dest.color)
+          // JACKPOT: sticker Groom Salute is the main confetti (no full spark stack).
+          groomSalute()
           if (state.round) {
             state.round.placeId = dest.id
             state.round.placeLabel = dest.label
@@ -2286,6 +2384,8 @@
               richness: RoomState.richness(state),
               spinning: spinning,
               banditSpinning: banditSpinning,
+              groomSaluteActive: groomSaluteActive,
+              groomSaluteFires: groomSaluteFires,
             }
           },
           isSpinSettled: function () {
