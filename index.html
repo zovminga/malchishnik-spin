@@ -1016,6 +1016,8 @@
           guinness: ['Пить только сидя на стене'],
         }
 
+        // Removed Player ids kept on the Room (oldest dropped first).
+        var MAX_REMOVED_PLAYERS = 64
         var LOCAL_KEY = 'malchishnik-state-v3'
         var SYNC_KEY = 'malchishnik-sync-v1'
         var DEFAULT_ROOM =
@@ -1293,6 +1295,8 @@
             // Shared open Round for the Room: Round Owner + scored flag (ADR-0003).
             round: null,
             history: [],
+            // Removed Player ids: a removal sticks for every phone (ADR-0004).
+            removedPlayers: [],
             // Room Generation: missing/legacy → lowest safe baseline (ADR-0005).
             roomGeneration: 0,
             // Empty local clocks must not outrank the Room — see scripts/repro-score-wipe.mjs.
@@ -1325,8 +1329,14 @@
               : []
           })
           base.players = Array.isArray(raw.players)
-            ? raw.players.map(function (p) {
-                return { name: String(p.name || 'Игрок').slice(0, 18), score: Number(p.score) || 0 }
+            ? raw.players.map(function (p, i) {
+                var name = String(p.name || 'Игрок').slice(0, 18)
+                return {
+                  // Older builds had no Player id: derive the same one on every phone.
+                  id: p.id ? String(p.id) : 'legacy-' + i + '-' + name,
+                  name: name,
+                  score: Number(p.score) || 0,
+                }
               })
             : []
           base.activePlayer = Math.max(0, Math.min(base.players.length - 1, Number(raw.activePlayer) || 0))
@@ -1356,7 +1366,59 @@
           var ts = Number(raw.updatedAt)
           base.updatedAt = Number.isFinite(ts) ? ts : Date.now()
           base.updatedBy = raw.updatedBy || ''
+          base.removedPlayers = mergeRemovedPlayers(raw.removedPlayers, [])
+          dropRemovedPlayers(base, base.removedPlayers)
           return base
+        }
+
+        // Union of removed Player ids from two copies of the Room, oldest first, capped.
+        function mergeRemovedPlayers(a, b) {
+          var out = []
+          ;[a, b].forEach(function (list) {
+            ;(Array.isArray(list) ? list : []).forEach(function (id) {
+              id = String(id)
+              if (out.indexOf(id) === -1) out.push(id)
+            })
+          })
+          return out.slice(-MAX_REMOVED_PLAYERS)
+        }
+
+        // Drop one roster seat and keep Turn Player / Round Owner indexes on the same people.
+        function dropSeat(s, idx) {
+          s.players.splice(idx, 1)
+          if (!s.players.length) {
+            s.activePlayer = 0
+          } else if (s.activePlayer > idx) {
+            s.activePlayer -= 1
+          } else if (s.activePlayer === idx) {
+            // Next Turn Player after the removed seat (same rule as post-award handoff).
+            s.activePlayer = idx % s.players.length
+          }
+          if (!s.round || s.round.owner == null) return
+          if (s.round.owner > idx) {
+            s.round.owner -= 1
+          } else if (s.round.owner === idx) {
+            if (s.round.scored || !s.players.length) {
+              // Scored/stale Round on this seat: drop it so the index cannot land on the next Player.
+              s.round = null
+            } else {
+              // Round Owner removed on another phone: close the Round without points.
+              s.round.scored = true
+              s.round.aborted = true
+            }
+          }
+        }
+
+        // Remove every Player whose id is in removed (in place). Returns how many were dropped.
+        function dropRemovedPlayers(s, removed) {
+          if (!s || !Array.isArray(s.players) || !removed || !removed.length) return 0
+          var dropped = 0
+          for (var idx = s.players.length - 1; idx >= 0; idx--) {
+            if (removed.indexOf(String(s.players[idx].id)) === -1) continue
+            dropSeat(s, idx)
+            dropped++
+          }
+          return dropped
         }
 
         // Night Progress numeric score (history length, players, total scores).
@@ -1372,6 +1434,8 @@
           default: defaultState,
           normalize: normalizeState,
           richness: stateRichness,
+          mergeRemovedPlayers: mergeRemovedPlayers,
+          dropRemovedPlayers: dropRemovedPlayers,
         }
 
         function loadLocalState() {
@@ -1910,36 +1974,22 @@
           els.wheel.style.transform = 'rotate(' + rotation + 'deg)'
         }
 
-        // Drop a Player from the roster (ADR-0004: Night Progress may put them back).
+        // Drop a Player from the roster; the removal sticks for every phone (ADR-0004).
         function removePlayerAt(idx) {
           if (roomWriteBlocked()) return
           if (spinning || banditSpinning) return
           if (idx == null || idx < 0 || idx >= state.players.length) return
           if (roundIsOpen() && roundOwnerIndex() === idx) return
 
-          state.players.splice(idx, 1)
-
-          if (!state.players.length) {
-            state.activePlayer = 0
-          } else if (state.activePlayer > idx) {
-            state.activePlayer -= 1
-          } else if (state.activePlayer === idx) {
-            // Next Turn Player after the removed seat (same rule as post-award handoff).
-            state.activePlayer = idx % state.players.length
-          }
-
-          // Open Round Owner is blocked above. If a scored/stale Round still
-          // points at this seat, drop it so the index cannot land on the next Player.
-          if (state.round && state.round.owner != null) {
-            if (state.round.owner > idx) state.round.owner -= 1
-            else if (state.round.owner === idx) state.round = null
-          }
+          state.removedPlayers = mergeRemovedPlayers(state.removedPlayers, [state.players[idx].id])
+          // Open Round Owner is blocked above; dropSeat keeps the other indexes in place.
+          dropSeat(state, idx)
           if (RoundSession.localOwner != null) {
             if (RoundSession.localOwner > idx) RoundSession.localOwner -= 1
             else if (RoundSession.localOwner === idx) RoundSession.clearLocal()
           }
 
-          touch()
+          touch({ immediate: true })
         }
 
         function renderPlayers() {
@@ -2791,7 +2841,7 @@
           if (roomWriteBlocked()) return
           var name = (els.playerInput.value || '').trim()
           if (!name || state.players.length >= 16) return
-          state.players.push({ name: name, score: 0 })
+          state.players.push({ id: uid('pl'), name: name, score: 0 })
           els.playerInput.value = ''
           if (state.players.length === 1) state.activePlayer = 0
           touch()
