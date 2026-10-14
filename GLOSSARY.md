@@ -17,8 +17,12 @@ A task attached to a Place that may be drawn after the wheel lands.
 _Avoid_: Quest, mini-game, assignment
 
 **Round**:
-The open stretch after a spin lands until points for that spin are awarded.
+The open stretch from a spin until points for that spin are awarded or the Round is reset. Its Place is chosen when the wheel starts turning and shown to everyone when the wheel stops.
 _Avoid_: Turn (for this meaning), spin result window
+
+**Round Reset**:
+An action that closes only an open Round nobody can finish (it has no Place), with no points. Turn Player, Night Progress and Room Generation stay as they were. Offered only for such a stuck Round.
+_Avoid_: Score Clear (for this meaning), «сбросить игру», abort
 
 **Round Owner**:
 The player who spun this Round and who alone receives its points. Not the same idea as Turn Player.
