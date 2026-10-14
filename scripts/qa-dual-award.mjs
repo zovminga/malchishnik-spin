@@ -6,9 +6,7 @@ import { chromium } from 'playwright'
 import fs from 'fs'
 import {
   chromePath,
-  ensurePlayers,
   gameQuery,
-  resetGame,
   roomUrl,
   waitForGame,
   waitSpinSettled,
@@ -117,6 +115,14 @@ async function prepareAwardable(pageA, pageB) {
   throw new Error('could not prepare awardable open Round on both clients')
 }
 
+// Fire each button's handler on both phones at the same moment. A Playwright click waits
+// for the button to be actionable; when the other phone wins, this phone's score buttons
+// rightly disappear and that wait used to hang for 30s (flaky on Places without Challenges).
+async function pressTogether(pageA, selectorA, pageB, selectorB) {
+  const press = (page, selector) => page.evaluate((sel) => document.querySelector(sel).click(), selector)
+  await Promise.all([press(pageA, selectorA), press(pageB, selectorB)])
+}
+
 /** Night Progress + Round closed agree on both phones after an award. */
 async function waitAwardConverged(pageA, pageB, timeout = 15000) {
   const start = Date.now()
@@ -140,16 +146,55 @@ async function waitAwardConverged(pageA, pageB, timeout = 15000) {
   return { qA: await gameQuery(pageA), qB: await gameQuery(pageB), ok: false }
 }
 
+const DB = 'https://malchishnikspin-default-rtdb.firebaseio.com'
+
+// Seed a Room whose Places all have Challenges (bandit path) or none (attendance path),
+// so both scoring paths run every time instead of depending on where the wheel lands.
+async function seedRoom(room, withChallenges) {
+  const res = await fetch(`${DB}/rooms/${room}/state.json`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      destinations: [
+        { id: 'bar', label: 'БАР', tagline: 'x', color: '#1a6bff', text: '#fff' },
+        { id: 'range', label: 'ТИР', tagline: 'y', color: '#2ecc71', text: '#04150a' },
+      ],
+      challenges: withChallenges ? { bar: ['Шот'], range: ['Мишень'] } : {},
+      players: [
+        { id: 'qa-azat', name: 'Azat', score: 0 },
+        { id: 'qa-alexander', name: 'Alexander', score: 0 },
+      ],
+      activePlayer: 0,
+      history: [],
+      updatedAt: Date.now(),
+      updatedBy: 'qa-seed',
+    }),
+  })
+  if (!res.ok) throw new Error('seed failed ' + res.status)
+}
+
 async function main() {
   const browser = await chromium.launch({
     headless: true,
     executablePath: chromePath(),
     args: ['--disable-dev-shm-usage'],
   })
+  let ok = true
+  for (const withChallenges of [false, true]) {
+    ok = (await runRoom(browser, withChallenges)) && ok
+  }
+  await browser.close()
+  process.exit(ok ? 0 : 1)
+}
+
+async function runRoom(browser, withChallenges) {
+  const kind = withChallenges ? 'challenges' : 'no-challenges'
+  console.log(`--- Places with ${kind}`)
   const pageA = await newPage(browser)
   const pageB = await newPage(browser)
 
-  const url = roomUrl(BASE, 'qa-dual-award-' + Date.now())
+  const url = roomUrl(BASE, `qa-dual-award-${kind}-` + Date.now())
+  await seedRoom(new URL(url).searchParams.get('room'), withChallenges)
   console.log('url', url)
 
   await Promise.all([
@@ -161,14 +206,8 @@ async function main() {
   let qA = await gameQuery(pageA)
   const buildOk = /build\s+\d+/i.test(qA.build || '')
   console.log(buildOk ? 'PASS | build' : 'FAIL | build', qA.build)
-  if (!buildOk) {
-    await browser.close()
-    process.exit(1)
-  }
+  if (!buildOk) return false
 
-  await resetGame(pageA)
-  await pageA.waitForTimeout(800)
-  await ensurePlayers(pageA, ['Azat', 'Alexander'])
   await pageB.waitForFunction(
     () => (window.Malchishnik.query().scores || []).length >= 2,
     null,
@@ -209,7 +248,7 @@ async function main() {
   const azatBeforeRace = scoreOf(qA, 'Azat')
   const histBeforeRace = (qA.history || []).length
 
-  await Promise.all([pageA.click('#doneBtn'), pageB.click('#failBtn')])
+  await pressTogether(pageA, '#doneBtn', pageB, '#failBtn')
   settled = await waitAwardConverged(pageA, pageB, 15000)
   qA = settled.qA
   qB = settled.qB
@@ -231,10 +270,8 @@ async function main() {
   )
 
   // --- 3) Second press must not double ---
-  await pageA.click('#doneBtn').catch(() => {})
-  await pageB.click('#doneBtn').catch(() => {})
-  await pageA.click('#failBtn').catch(() => {})
-  await pageB.click('#failBtn').catch(() => {})
+  await pressTogether(pageA, '#doneBtn', pageB, '#doneBtn')
+  await pressTogether(pageA, '#failBtn', pageB, '#failBtn')
   await pageA.waitForTimeout(1500)
   qA = await gameQuery(pageA)
   qB = await gameQuery(pageB)
@@ -261,12 +298,11 @@ async function main() {
     qB.turnOwnerName,
   )
 
-  await pageA.screenshot({ path: OUT + '/dual-award-a.png', fullPage: true })
-  await pageB.screenshot({ path: OUT + '/dual-award-b.png', fullPage: true })
-  await browser.close()
-
-  const ok = buildOk && nonOwnerAward && raceSingle && noDouble && closed
-  process.exit(ok ? 0 : 1)
+  await pageA.screenshot({ path: `${OUT}/dual-award-${kind}-a.png`, fullPage: true })
+  await pageB.screenshot({ path: `${OUT}/dual-award-${kind}-b.png`, fullPage: true })
+  await pageA.context().close()
+  await pageB.context().close()
+  return buildOk && nonOwnerAward && raceSingle && noDouble && closed
 }
 
 main().catch((e) => {
