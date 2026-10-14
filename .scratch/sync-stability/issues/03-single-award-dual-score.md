@@ -4,10 +4,10 @@
 
 **Blocked by:** 01 — Prefactor sync seams
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Done/fail from any client awards the Round Owner (not the presser’s identity as owner)
-- [ ] A second done/fail on the same Round does not apply points again
-- [ ] After a successful award, the Round closes and Turn Player can advance as today
-- [ ] Playwright multi-client test: two clients race done/fail — single award, correct Round Owner score
-- [ ] Existing wipe and QA suites still pass
+- [x] Done/fail from any client awards the Round Owner (not the presser’s identity as owner)
+- [x] A second done/fail on the same Round does not apply points again
+- [x] After a successful award, the Round closes and Turn Player can advance as today
+- [x] Playwright multi-client test: two clients race done/fail — single award, correct Round Owner score
+- [x] Existing wipe and QA suites still pass
