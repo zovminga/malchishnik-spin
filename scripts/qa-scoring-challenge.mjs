@@ -44,6 +44,7 @@ async function main() {
   let foundChallenge = false
   let place = ''
   let challenge = ''
+  let roundOwner = ''
 
   for (let attempt = 1; attempt <= 12; attempt++) {
     await page.click('#spinBtn')
@@ -57,6 +58,7 @@ async function main() {
 
     console.log(`attempt ${attempt}: ${place} bandit=${canBandit}`)
     if (canBandit) {
+      roundOwner = (await gameQuery(page)).turnOwnerName || ''
       await banditBtn.click()
       await page.waitForTimeout(3500)
       challenge = (await page.locator('#challengeOut').innerText()).trim()
@@ -81,6 +83,8 @@ async function main() {
   }
 
   let q = await gameQuery(page)
+  roundOwner = roundOwner || q.turnOwnerName || ''
+  const nextOwner = /Azat/i.test(roundOwner) ? 'Alexander' : 'Azat'
   console.log(
     'BEFORE',
     q.scores.map((p) => `${p.name} ${p.score}`).join(' | '),
@@ -88,6 +92,8 @@ async function main() {
     place,
     'challenge=',
     challenge,
+    'roundOwner=',
+    roundOwner,
   )
   await page.screenshot({ path: path.join(OUT, 'challenge-before-score.png'), fullPage: true })
 
@@ -104,13 +110,15 @@ async function main() {
   console.log('BANDIT_LOCKED', q.banditLocked)
   console.log('TURN', q.turnOwnerName)
 
-  const passAzat =
-    /Azat/i.test(hist0.who || '') &&
+  const ownerRe = new RegExp(roundOwner.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i')
+  const nextRe = new RegExp(nextOwner.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i')
+  const passOwner =
+    ownerRe.test(hist0.who || '') &&
     /\+2/.test(hist0.note || '') &&
     /выполнил/.test(hist0.note || '') &&
-    !/Alexander/i.test(hist0.who || '')
+    !nextRe.test(hist0.who || '')
   const passLock = !!q.banditLocked
-  const passTurn = /Alexander/i.test(q.turnOwnerName || '')
+  const passTurn = nextRe.test(q.turnOwnerName || '')
   const detailLock = String(q.banditLocked)
   const detailTurn = q.turnOwnerName
   const detailHist0 = `${hist0.who} ${hist0.note}`
@@ -139,9 +147,9 @@ async function main() {
   await page.screenshot({ path: path.join(OUT, 'challenge-after-two-rounds.png'), fullPage: true })
 
   const results = [
-    ['Challenge place scored +2 to Azat', passAzat, detailHist0],
+    [`Challenge place scored +2 to ${roundOwner}`, passOwner, detailHist0],
     ['Bandit locked after score', passLock, detailLock],
-    ['Turn -> Alexander', passTurn, detailTurn],
+    [`Turn -> ${nextOwner}`, passTurn, detailTurn],
     ['Second log entry exists', q.history.length >= 2, String(q.history.length)],
   ]
 
