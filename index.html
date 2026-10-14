@@ -346,10 +346,27 @@
         text-shadow: 2px 2px 0 #000;
         animation: btn-flow 1.2s linear infinite;
       }
+      .spin-btn:disabled,
+      .bandit-btn:disabled {
+        opacity: 0.5;
+        filter: grayscale(0.25);
+        animation: none;
+        cursor: not-allowed;
+      }
+      .spin-btn[data-spin-available='true'] {
+        box-shadow: 0 0 0 3px rgba(184, 255, 0, 0.55);
+      }
       .bandit-btn {
         background: linear-gradient(90deg, #111, #555, #ffe566, #111);
         background-size: 300% 100%;
         margin-top: 0.5rem;
+      }
+      .bandit-box.is-rolling .bandit-window {
+        border-color: var(--pink);
+        box-shadow: inset 0 0 0 2px rgba(255, 20, 147, 0.35);
+      }
+      .bandit-box.challenge-ready .challenge-out {
+        color: var(--gold);
       }
       .result {
         min-height: 4.8rem;
@@ -430,11 +447,24 @@
       }
       .score-actions {
         display: flex;
+        flex-wrap: wrap;
         gap: 0.4rem;
         margin-top: 0.55rem;
+        padding: 0.55rem;
+        border: 3px solid var(--lime);
+        background: rgba(184, 255, 0, 0.12);
       }
       .score-actions[hidden] {
         display: none !important;
+      }
+      .score-actions-kicker {
+        flex: 1 0 100%;
+        margin: 0 0 0.15rem;
+        font-size: 0.78rem;
+        font-weight: 900;
+        letter-spacing: 0.14em;
+        color: var(--lime);
+        text-transform: uppercase;
       }
       .score-actions button {
         flex: 1;
@@ -726,7 +756,14 @@
           </div>
           <button type="button" class="bandit-btn" id="banditBtn">КРУТИТЬ ЗАДАНИЕ</button>
           <p class="challenge-out" id="challengeOut"></p>
-          <div class="score-actions" id="scoreActions" hidden>
+          <div
+            class="score-actions"
+            id="scoreActions"
+            hidden
+            data-score-actions="hidden"
+            aria-label="Оценка раунда"
+          >
+            <p class="score-actions-kicker" id="scoreActionsKicker">Оцени раунд</p>
             <button type="button" class="ok" id="doneBtn">+2 выполнил</button>
             <button type="button" class="secondary" id="failBtn">+0 слил</button>
           </div>
@@ -1054,6 +1091,7 @@
         function finishRoundUi(nextIdx) {
           lockRoundAfterScore()
           els.banditBox.classList.remove('show')
+          els.banditBox.classList.remove('is-rolling', 'challenge-ready')
           els.challengeOut.textContent = ''
           RoundSession.clearLocal()
           // Keep scored Round on the wire (ADR-0003): peers must see scored=true so a
@@ -1066,10 +1104,37 @@
             '</p><p class="result-tagline">Дальше крутит ' +
             esc(name) +
             '</p>'
-          if (!spinning) {
-            els.spinBtn.disabled = false
-            els.spinBtn.textContent = 'КРУТИТЬ · ' + name + '!!!'
+          refreshSpinControl()
+        }
+
+        // Light control polish: Turn Player can tell when spin is available.
+        function spinIsAvailable() {
+          return !spinning && !banditSpinning && !roundIsOpen() && state.players.length > 0
+        }
+
+        function scoreActionsAreVisible() {
+          return !!(els.scoreActions && !els.scoreActions.hidden && !els.scoreActions.hasAttribute('hidden'))
+        }
+
+        function refreshSpinControl() {
+          if (spinning) {
+            els.spinBtn.disabled = true
+            els.spinBtn.textContent = 'КРУТИТСЯ!!!'
+            els.spinBtn.setAttribute('aria-busy', 'true')
+            els.spinBtn.setAttribute('data-spin-available', 'false')
+            return
           }
+          els.spinBtn.removeAttribute('aria-busy')
+          if (roundIsOpen()) {
+            els.spinBtn.disabled = true
+            els.spinBtn.textContent = 'СНАЧАЛА ОЧКИ'
+            els.spinBtn.setAttribute('data-spin-available', 'false')
+            return
+          }
+          els.spinBtn.disabled = false
+          els.spinBtn.setAttribute('data-spin-available', spinIsAvailable() ? 'true' : 'false')
+          var name = ownerName(roundOwnerIndex())
+          els.spinBtn.textContent = state.players.length ? 'КРУТИТЬ · ' + name + '!!!' : 'КРУТИТЬ МЕСТО!!!'
         }
 
         // -------------------------------------------------------------------------
@@ -1192,11 +1257,14 @@
         function unlockUi() {
           spinning = false
           banditSpinning = false
-          els.spinBtn.disabled = false
           els.banditBtn.disabled = false
           els.banditBtn.hidden = false
+          els.banditBtn.removeAttribute('aria-busy')
+          els.banditBox.classList.remove('is-rolling', 'challenge-ready')
           els.scoreActions.hidden = true
           els.scoreActions.setAttribute('hidden', '')
+          els.scoreActions.setAttribute('data-score-actions', 'hidden')
+          refreshSpinControl()
         }
 
         function abortRound(keepScores) {
@@ -1209,8 +1277,7 @@
           els.result.innerHTML = keepScores
             ? '<p class="result-placeholder">Раунд сброшен — можно крутить</p>'
             : '<p class="result-placeholder">Жми кнопку</p>'
-          var name = currentName()
-          els.spinBtn.textContent = state.players.length ? 'КРУТИТЬ · ' + name + '!!!' : 'КРУТИТЬ МЕСТО!!!'
+          refreshSpinControl()
         }
 
         function resetGame() {
@@ -1346,13 +1413,20 @@
         function lockRoundAfterScore() {
           els.scoreActions.hidden = true
           els.scoreActions.setAttribute('hidden', '')
+          els.scoreActions.setAttribute('data-score-actions', 'hidden')
           els.banditBtn.disabled = true
+          els.banditBtn.removeAttribute('aria-busy')
           els.banditBtn.textContent = 'ОЧКИ ЗАСЧИТАНЫ'
+          els.banditBox.classList.remove('is-rolling', 'challenge-ready')
+          refreshSpinControl()
         }
 
         function showScoreActions() {
           els.scoreActions.hidden = false
           els.scoreActions.removeAttribute('hidden')
+          els.scoreActions.setAttribute('data-score-actions', 'visible')
+          els.banditBox.classList.remove('is-rolling')
+          els.banditBox.classList.add('challenge-ready')
         }
 
         // -------------------------------------------------------------------------
@@ -1651,10 +1725,8 @@
             els.turnLine.textContent = 'Раунд: ' + ownerName(shown) + ' — очки только ему'
           } else {
             els.turnLine.textContent = 'Сейчас крутит: ' + ownerName(shown)
-            if (!spinning && !banditSpinning) {
-              els.spinBtn.textContent = 'КРУТИТЬ · ' + ownerName(shown) + '!!!'
-            }
           }
+          refreshSpinControl()
           if (!state.players.length) {
             els.scoreboard.hidden = true
             return
@@ -1917,6 +1989,9 @@
             RoundSession.clearLocal()
             els.scoreActions.hidden = true
             els.scoreActions.setAttribute('hidden', '')
+            els.scoreActions.setAttribute('data-score-actions', 'hidden')
+            els.banditBox.classList.remove('is-rolling', 'challenge-ready')
+            refreshSpinControl()
             return
           }
           RoundSession.localOwner = state.round.owner
@@ -1943,11 +2018,15 @@
           RoundSession.challenge = state.round && state.round.challenge != null ? state.round.challenge : null
           RoundSession.localScored = !!(state.round && state.round.scored)
           els.scoreActions.hidden = true
+          els.scoreActions.setAttribute('hidden', '')
+          els.scoreActions.setAttribute('data-score-actions', 'hidden')
+          els.banditBox.classList.remove('is-rolling', 'challenge-ready')
           els.challengeOut.textContent = RoundSession.challenge || ''
           if (RoundSession.localScored) {
             els.banditBox.classList.add('show')
             lockRoundAfterScore()
             if (RoundSession.challenge) els.challengeOut.textContent = RoundSession.challenge
+            refreshSpinControl()
             return
           }
           var list = state.challenges[dest.id] || []
@@ -1959,10 +2038,12 @@
             document.getElementById('doneBtn').textContent = '+1 был там'
             document.getElementById('failBtn').textContent = '+0 мимо'
             els.challengeOut.textContent = 'Без доп. задания — просто маршрут.'
+            refreshSpinControl()
             return
           }
           els.banditBtn.hidden = false
           els.banditBtn.disabled = false
+          els.banditBtn.removeAttribute('aria-busy')
           els.banditBtn.textContent = RoundSession.challenge ? 'ДРУГОЕ ЗАДАНИЕ' : 'КРУТИТЬ ЗАДАНИЕ'
           document.getElementById('doneBtn').textContent = '+2 выполнил'
           document.getElementById('failBtn').textContent = '+0 слил'
@@ -1980,6 +2061,7 @@
           els.banditReel.style.transition = 'none'
           els.banditReel.style.transform = 'translateY(0)'
           els.banditBox.classList.add('show')
+          refreshSpinControl()
         }
 
         function showPlace(dest) {
@@ -2015,9 +2097,8 @@
           // Record Round Owner on the shared Room so every phone sees the same Round.
           RoundSession.open(state.activePlayer)
           var spinToken = state.round && state.round.token
-          els.spinBtn.disabled = true
-          els.spinBtn.textContent = 'КРУТИТСЯ!!!'
-          els.banditBox.classList.remove('show')
+          refreshSpinControl()
+          els.banditBox.classList.remove('show', 'is-rolling', 'challenge-ready')
           els.result.innerHTML = '<p class="result-placeholder">Крутится…</p>'
           renderPlayers()
           touch({ immediate: true, skipEditor: true })
@@ -2044,8 +2125,6 @@
             els.wheel.style.transition = 'none'
             els.wheel.style.transform = 'rotate(' + rotation + 'deg)'
             spinning = false
-            els.spinBtn.disabled = false
-            els.spinBtn.textContent = 'КРУТИТЬ МЕСТО!!!'
             // Lost the dual-spin race, or Round already scored elsewhere — do not overwrite.
             if (
               !state.round ||
@@ -2057,6 +2136,7 @@
               return
             }
             showPlace(state.destinations[landed])
+            refreshSpinControl()
           }, SPIN_MS)
         }
 
@@ -2067,9 +2147,16 @@
           if (!list.length) return
           banditSpinning = true
           els.scoreActions.hidden = true
+          els.scoreActions.setAttribute('hidden', '')
+          els.scoreActions.setAttribute('data-score-actions', 'hidden')
           els.banditBtn.disabled = true
-          els.challengeOut.textContent = ''
+          els.banditBtn.setAttribute('aria-busy', 'true')
+          els.banditBtn.textContent = 'КРУТИТСЯ…'
+          els.banditBox.classList.add('is-rolling')
+          els.banditBox.classList.remove('challenge-ready')
+          els.challengeOut.textContent = 'Выбираем задание…'
           RoundSession.challenge = null
+          refreshSpinControl()
           var first = els.banditReel.querySelector('.bandit-item')
           var itemH = first ? first.getBoundingClientRect().height : 52
           var pick = ChallengePick.pickIndex(list)
@@ -2084,6 +2171,8 @@
             RoundSession.challenge = list[pick]
             els.challengeOut.textContent = RoundSession.challenge
             banditSpinning = false
+            els.banditBtn.removeAttribute('aria-busy')
+            els.banditBox.classList.remove('is-rolling')
             if (RoundSession.localScored || (state.round && state.round.scored)) {
               lockRoundAfterScore()
               return
@@ -2095,6 +2184,7 @@
             els.banditBtn.disabled = false
             els.banditBtn.textContent = 'ДРУГОЕ ЗАДАНИЕ'
             showScoreActions()
+            refreshSpinControl()
             burst(RoundSession.place.color)
           }, BANDIT_MS)
         }
@@ -2202,9 +2292,9 @@
               // Adopting the Room's Round ends a losing local spin animation.
               if (spinning && state.round && !state.round.scored) {
                 spinning = false
-                els.spinBtn.disabled = false
               }
               applyRoundUiFromState()
+              refreshSpinControl()
               if (paintTimer != null) {
                 cancelAnimationFrame(paintTimer)
                 paintTimer = null
@@ -2434,12 +2524,16 @@
               richness: RoomState.richness(state),
               spinning: spinning,
               banditSpinning: banditSpinning,
+              // Control clarity observables for Turn Player / Round Owner UX.
+              spinAvailable: spinIsAvailable(),
+              scoreActionsVisible: scoreActionsAreVisible(),
               groomSaluteActive: groomSaluteActive,
               groomSaluteFires: groomSaluteFires,
             }
           },
+          // Wheel/bandit animations idle — not the same as spinAvailable (open Round disables spin).
           isSpinSettled: function () {
-            return !spinning && !banditSpinning && !els.spinBtn.disabled
+            return !spinning && !banditSpinning
           },
         }
         try {
