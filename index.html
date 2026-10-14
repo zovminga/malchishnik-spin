@@ -134,10 +134,33 @@
         background: var(--lime);
         color: #111;
       }
-      .top-actions .reset-game {
+      .reset-actions {
+        position: relative;
+        z-index: 2;
+        width: min(100%, 27rem);
+        margin: 0.85rem auto 0.25rem;
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 0.4rem;
+      }
+      .reset-actions button {
+        flex: 0 1 auto;
+        min-height: 1.85rem;
+        padding: 0.28rem 0.65rem;
+        border: 1px solid rgba(255, 255, 255, 0.35);
         background: #111;
-        color: #fff;
+        color: rgba(215, 224, 215, 0.9);
+        font-family: inherit;
+        font-weight: 700;
+        font-size: 0.68rem;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+        cursor: pointer;
+      }
+      .reset-actions button:hover {
         border-color: var(--pink);
+        color: #fff;
       }
       .ticker {
         width: 100vw;
@@ -787,7 +810,6 @@
         <p class="lede">Крути рулетку. Списки и очки общие у всех по одной ссылке.</p>
         <div class="top-actions">
           <button type="button" class="share" id="shareFriendsBtn">Скопировать ссылку</button>
-          <button type="button" class="reset-game" id="scoreClearBtn">Очистить баллы</button>
         </div>
 
         <section class="panel" aria-label="Игроки">
@@ -866,9 +888,12 @@
 
       <footer class="footer">
         <p>Одна ссылка — одна игра на всех.</p>
+        <div class="reset-actions" aria-label="Сброс комнаты">
+          <button type="button" id="scoreClearBtn">Очистить баллы</button>
+          <button type="button" id="gameRestartBtn">Перезапустить игру</button>
+        </div>
         <div class="footer-tools">
-          <span id="buildTag">build 23</span>
-          <button type="button" id="hardResetBtn">сброс кэша</button>
+          <span id="buildTag">build 24</span>
         </div>
       </footer>
     </div>
@@ -1365,39 +1390,27 @@
             p.score = 0
           })
           state.history = []
+          // Turn Player = first remaining Player when any remain.
           state.activePlayer = 0
           state.roomGeneration = (Number(state.roomGeneration) || 0) + 1
           touch({ immediate: true })
         }
 
-        function hardResetCache() {
+        // Game Restart: Score Clear + remove every Player; keep Places/Challenges (ADR-0005).
+        function gameRestart() {
           if (
             !confirm(
-              'Сбросить зависшее в этом браузере и перезагрузить страницу?\n\n' +
-                'Нужно, если кнопки залипли.\n' +
-                'Очки и лог тоже обнулятся у всех.',
+              'Перезапустить игру?\nУдалит всех игроков, обнулит баллы и лог.\nМеста и задания останутся.',
             )
           ) {
             return
           }
           abortRound(false)
-          try {
-            localStorage.removeItem(LOCAL_KEY)
-            localStorage.removeItem(SYNC_KEY)
-            localStorage.removeItem('malchishnik-state-v2')
-            localStorage.removeItem('malchishnik-state-v1')
-          } catch (e) {}
-          state.players.forEach(function (p) {
-            p.score = 0
-          })
+          state.players = []
           state.history = []
           state.activePlayer = 0
-          state.round = null
-          // Пушим чистый state, потом жёсткий reload.
+          state.roomGeneration = (Number(state.roomGeneration) || 0) + 1
           touch({ immediate: true })
-          setTimeout(function () {
-            location.reload()
-          }, 350)
         }
 
         function refreshBanditIfCurrentPlace(placeId) {
@@ -2648,7 +2661,7 @@
         })
 
         document.getElementById('scoreClearBtn').addEventListener('click', scoreClear)
-        document.getElementById('hardResetBtn').addEventListener('click', hardResetCache)
+        document.getElementById('gameRestartBtn').addEventListener('click', gameRestart)
 
         els.editorList.addEventListener('change', function (e) {
           var t = e.target
