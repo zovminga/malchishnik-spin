@@ -65,6 +65,12 @@ async function main() {
         break
       }
     }
+    // Attendance-only Place still leaves an open Round — score it away so the next spin can run.
+    const doneBtn = page.locator('#doneBtn')
+    if (await doneBtn.isVisible().catch(() => false)) {
+      await doneBtn.click()
+      await page.waitForTimeout(900)
+    }
   }
 
   if (!foundChallenge) {
