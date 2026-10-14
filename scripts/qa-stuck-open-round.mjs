@@ -3,13 +3,10 @@
  * must restore bandit/score UI — not leave spin on «СНАЧАЛА ОЧКИ» with «Жми кнопку».
  */
 import { chromium } from 'playwright'
-import { chromePath, roomUrl, waitForGame, gameQuery } from './qa-lib.mjs'
+import { chromePath, roomUrl, waitForGame, gameQuery, qaBase } from './qa-lib.mjs'
 
 const DB = 'https://malchishnikspin-default-rtdb.firebaseio.com'
-const BASE = (process.env.QA_URL || process.env.BASE || 'http://127.0.0.1:8765/').replace(
-  /\/?$/,
-  '/',
-)
+const BASE = qaBase()
 
 async function putState(url, obj) {
   const res = await fetch(url, {

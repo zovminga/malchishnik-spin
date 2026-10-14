@@ -8,18 +8,19 @@
 import { chromium } from 'playwright'
 import fs from 'fs'
 import {
+  artifactDir,
   chromePath,
   ensurePlayers,
   gameQuery,
+  qaBase,
   resetGame,
   roomUrl,
   waitForGame,
 } from './qa-lib.mjs'
 
-const BASE = process.env.QA_URL || process.env.BASE || 'https://zovminga.github.io/malchishnik-spin/'
+const BASE = qaBase()
 const DB = 'https://malchishnikspin-default-rtdb.firebaseio.com'
-const OUT = process.env.QA_OUT || '/opt/cursor/artifacts/qa-score-clear'
-fs.mkdirSync(OUT, { recursive: true })
+const OUT = artifactDir('qa-score-clear')
 
 const report = []
 function log(step, ok, detail) {

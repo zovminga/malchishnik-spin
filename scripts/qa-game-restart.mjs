@@ -8,17 +8,18 @@
 import { chromium } from 'playwright'
 import fs from 'fs'
 import {
+  artifactDir,
   chromePath,
   gameQuery,
   gameRestart,
+  qaBase,
   roomUrl,
   waitForGame,
 } from './qa-lib.mjs'
 
-const BASE = process.env.QA_URL || process.env.BASE || 'https://zovminga.github.io/malchishnik-spin/'
+const BASE = qaBase()
 const DB = 'https://malchishnikspin-default-rtdb.firebaseio.com'
-const OUT = process.env.QA_OUT || '/opt/cursor/artifacts/qa-game-restart'
-fs.mkdirSync(OUT, { recursive: true })
+const OUT = artifactDir('qa-game-restart')
 
 const report = []
 function log(step, ok, detail) {

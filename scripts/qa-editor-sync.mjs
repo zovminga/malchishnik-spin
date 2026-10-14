@@ -7,12 +7,9 @@
  */
 import { chromium } from 'playwright'
 
-import { chromePath, ensurePlayers, roomUrl, waitForGame } from './qa-lib.mjs'
+import { chromePath, ensurePlayers, qaBase, roomUrl, waitForGame } from './qa-lib.mjs'
 
-const BASE = (process.env.QA_URL || process.env.BASE || 'http://127.0.0.1:8765/').replace(
-  /\/?$/,
-  '/',
-)
+const BASE = qaBase()
 const DB = 'https://malchishnikspin-default-rtdb.firebaseio.com'
 const SYNC_MS = 10000
 const PAYLOAD = '#f00"/><img src=x onerror="window.__qaXss=(window.__qaXss||0)+1">'

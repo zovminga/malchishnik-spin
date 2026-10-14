@@ -3,18 +3,18 @@
  * Seam: window.Malchishnik.query + Playwright multi-context.
  */
 import { chromium } from 'playwright'
-import fs from 'fs'
 import {
+  artifactDir,
   chromePath,
   gameQuery,
+  qaBase,
   roomUrl,
   waitForGame,
   waitSpinSettled,
 } from './qa-lib.mjs'
 
-const BASE = process.env.QA_URL || process.env.BASE || 'https://zovminga.github.io/malchishnik-spin/'
-const OUT = process.env.QA_OUT || '/opt/cursor/artifacts/qa'
-fs.mkdirSync(OUT, { recursive: true })
+const BASE = qaBase()
+const OUT = artifactDir('qa-dual-award')
 
 async function newPage(browser) {
   const page = await (

@@ -6,12 +6,9 @@
  */
 import { chromium } from 'playwright'
 
-import { chromePath, ensurePlayers, gameQuery, roomUrl, waitForGame } from './qa-lib.mjs'
+import { chromePath, ensurePlayers, gameQuery, qaBase, roomUrl, waitForGame } from './qa-lib.mjs'
 
-const BASE = (process.env.QA_URL || process.env.BASE || 'http://127.0.0.1:8765/').replace(
-  /\/?$/,
-  '/',
-)
+const BASE = qaBase()
 // Firebase may need a few seconds to notice the socket is gone and to reconnect.
 const DETECT_MS = 20000
 

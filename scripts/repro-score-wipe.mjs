@@ -4,19 +4,18 @@
  * Richness comes from window.Malchishnik.richness (RoomState) — not a cloned formula.
  *
  * Usage:
- *   node scripts/repro-score-wipe.mjs
- *   BASE=http://127.0.0.1:8765/ EXPECT=green LOOPS=3 node scripts/repro-score-wipe.mjs
+ *   node scripts/repro-score-wipe.mjs   (local server, see README)
+ *   BASE=https://zovminga.github.io/malchishnik-spin/ EXPECT=green LOOPS=3 node scripts/repro-score-wipe.mjs
  *
  * Exit 0 = expected verdict
  * Exit 1 = unexpected / scores wiped when EXPECT=green
  * Exit 2 = harness error
  */
 import { chromium } from 'playwright'
-import fs from 'fs'
-import { chromePath, pageRichness, waitForGame, gameQuery } from './qa-lib.mjs'
+import { assertTestRoom, chromePath, pageRichness, waitForGame, gameQuery, qaBase } from './qa-lib.mjs'
 
 const DB = 'https://malchishnikspin-default-rtdb.firebaseio.com'
-const BASE = (process.env.BASE || process.env.QA_URL || 'https://zovminga.github.io/malchishnik-spin/').replace(/\/?$/, '/')
+const BASE = qaBase()
 const EXPECT = (process.env.EXPECT || 'green').toLowerCase()
 const LOOPS = Math.max(1, Number(process.env.LOOPS) || 1)
 const MINIMAL = process.env.MINIMAL === '1'
@@ -119,7 +118,7 @@ async function main() {
   let reds = 0
   let last = null
   for (let i = 0; i < LOOPS; i++) {
-    const room = 'diag-wipe-' + Date.now() + '-' + i
+    const room = assertTestRoom('qa-wipe-' + Date.now() + '-' + i)
     const stateUrl = `${DB}/rooms/${room}/state.json`
     last = await oneJoin(browser, room, stateUrl)
     if (last.wiped) reds++
@@ -128,7 +127,6 @@ async function main() {
     )
   }
 
-  fs.mkdirSync('/opt/cursor/artifacts', { recursive: true })
   await browser.close()
 
   const bugRate = reds / LOOPS

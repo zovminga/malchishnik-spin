@@ -1,15 +1,18 @@
 import { chromium } from 'playwright'
+import path from 'path'
 import {
+  artifactDir,
   chromePath,
   ensurePlayers,
   gameQuery,
+  qaBase,
   resetGame,
   roomUrl,
   waitForGame,
   waitSpinSettled,
 } from './qa-lib.mjs'
 
-const BASE = process.env.QA_URL || process.env.BASE || 'https://zovminga.github.io/malchishnik-spin/'
+const BASE = qaBase()
 
 async function scoreCurrent(page) {
   const banditBtn = page.locator('#banditBtn')
@@ -89,7 +92,7 @@ async function main() {
   const secondToAlexander = /Alexander/i.test((q.history[0] && q.history[0].who) || '')
   console.log(secondToAlexander ? 'PASS | second score to Alexander' : 'FAIL | second score wrong person')
 
-  await page.screenshot({ path: '/opt/cursor/artifacts/qa-turn-handoff.png', fullPage: true })
+  await page.screenshot({ path: path.join(artifactDir('qa-turn-handoff'), 'qa-turn-handoff.png'), fullPage: true })
   await browser.close()
   process.exit(handoffOk && lockedAlexander && secondToAlexander ? 0 : 1)
 }

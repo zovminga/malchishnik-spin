@@ -11,23 +11,21 @@
 import { chromium } from 'playwright'
 import fs from 'fs'
 import {
+  artifactDir,
   chromePath,
   ensurePlayers,
   gameQuery,
   gameRestart,
+  qaBase,
   resetGame,
   roomUrl,
   waitForGame,
 } from './qa-lib.mjs'
 
-const BASE = (process.env.QA_URL || process.env.BASE || 'http://127.0.0.1:8765/').replace(
-  /\/?$/,
-  '/',
-)
+const BASE = qaBase()
 const DB = 'https://malchishnikspin-default-rtdb.firebaseio.com'
 const DEFAULT_PARTY_ROOM = 'malchishnik'
-const OUT = process.env.QA_OUT || '/opt/cursor/artifacts/qa-reset-matrix'
-fs.mkdirSync(OUT, { recursive: true })
+const OUT = artifactDir('qa-reset-matrix')
 
 const report = []
 let failures = 0

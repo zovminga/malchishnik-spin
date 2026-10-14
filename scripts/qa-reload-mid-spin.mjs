@@ -8,12 +8,9 @@
  */
 import { chromium } from 'playwright'
 
-import { chromePath, ensurePlayers, gameQuery, roomUrl, waitForGame } from './qa-lib.mjs'
+import { chromePath, ensurePlayers, gameQuery, qaBase, roomUrl, waitForGame } from './qa-lib.mjs'
 
-const BASE = (process.env.QA_URL || process.env.BASE || 'http://127.0.0.1:8765/').replace(
-  /\/?$/,
-  '/',
-)
+const BASE = qaBase()
 const DB = 'https://malchishnikspin-default-rtdb.firebaseio.com'
 // Spin animation 5.6s + stall grace — generous for slow CI networks.
 const RECOVER_MS = 20000
