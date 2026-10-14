@@ -263,17 +263,40 @@
         flex-wrap: wrap;
         gap: 0.35rem;
       }
+      .player-chip-wrap {
+        display: inline-flex;
+        align-items: stretch;
+        max-width: 100%;
+      }
       .player-chip {
         border: 2px solid #fff;
+        border-right: none;
         background: #222;
         color: #fff;
         font-weight: 800;
         font-size: 0.85rem;
         padding: 0.35rem 0.55rem;
       }
-      .player-chip.active {
+      .player-remove {
+        border: 2px solid #fff;
+        border-left: 1px solid rgba(255, 255, 255, 0.35);
+        background: #222;
+        color: #fff;
+        font-weight: 900;
+        font-size: 0.85rem;
+        line-height: 1;
+        padding: 0.35rem 0.45rem;
+        cursor: pointer;
+      }
+      .player-chip-wrap.active .player-chip,
+      .player-chip-wrap.active .player-remove {
         background: var(--lime);
         color: #04150a;
+        border-color: #fff;
+      }
+      .player-remove:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
       }
       .turn-line {
         margin: 0.35rem 0 0;
@@ -844,7 +867,7 @@
       <footer class="footer">
         <p>Одна ссылка — одна игра на всех.</p>
         <div class="footer-tools">
-          <span id="buildTag">build 21</span>
+          <span id="buildTag">build 22</span>
           <button type="button" id="hardResetBtn">сброс кэша</button>
         </div>
       </footer>
@@ -1752,20 +1775,70 @@
           els.wheel.style.transform = 'rotate(' + rotation + 'deg)'
         }
 
+        // Drop a Player from the roster (ADR-0004: Night Progress may put them back).
+        function removePlayerAt(idx) {
+          if (spinning || banditSpinning) return
+          if (idx == null || idx < 0 || idx >= state.players.length) return
+          if (roundIsOpen() && roundOwnerIndex() === idx) return
+
+          state.players.splice(idx, 1)
+
+          if (!state.players.length) {
+            state.activePlayer = 0
+          } else if (state.activePlayer > idx) {
+            state.activePlayer -= 1
+          } else if (state.activePlayer === idx) {
+            // Next Turn Player after the removed seat (same rule as post-award handoff).
+            state.activePlayer = idx % state.players.length
+          }
+
+          // Open Round Owner is blocked above. If a scored/stale Round still
+          // points at this seat, drop it so the index cannot land on the next Player.
+          if (state.round && state.round.owner != null) {
+            if (state.round.owner > idx) state.round.owner -= 1
+            else if (state.round.owner === idx) state.round = null
+          }
+          if (RoundSession.localOwner != null) {
+            if (RoundSession.localOwner > idx) RoundSession.localOwner -= 1
+            else if (RoundSession.localOwner === idx) RoundSession.clearLocal()
+          }
+
+          touch()
+        }
+
         function renderPlayers() {
           els.playerList.innerHTML = ''
           var shown = roundOwnerIndex()
+          var rosterLocked = spinning || banditSpinning
           state.players.forEach(function (p, idx) {
+            var wrap = document.createElement('div')
+            wrap.className = 'player-chip-wrap' + (idx === shown ? ' active' : '')
+
             var chip = document.createElement('button')
             chip.type = 'button'
-            chip.className = 'player-chip' + (idx === shown ? ' active' : '')
+            chip.className = 'player-chip'
             chip.textContent = p.name + ' ' + p.score
             chip.addEventListener('click', function () {
-              if (spinning || banditSpinning || roundIsOpen()) return
+              if (rosterLocked || roundIsOpen()) return
               state.activePlayer = idx
               touch()
             })
-            els.playerList.appendChild(chip)
+
+            var removeBtn = document.createElement('button')
+            removeBtn.type = 'button'
+            removeBtn.className = 'player-remove'
+            removeBtn.setAttribute('aria-label', 'Удалить ' + p.name)
+            removeBtn.textContent = '×'
+            var blockOwner = roundIsOpen() && shown === idx
+            removeBtn.disabled = rosterLocked || blockOwner
+            removeBtn.addEventListener('click', function (e) {
+              e.stopPropagation()
+              removePlayerAt(idx)
+            })
+
+            wrap.appendChild(chip)
+            wrap.appendChild(removeBtn)
+            els.playerList.appendChild(wrap)
           })
           if (!state.players.length) {
             els.turnLine.textContent = 'Добавь игроков'

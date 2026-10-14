@@ -7,7 +7,7 @@
     "start": "python3 -m http.server 8765 --bind 0.0.0.0",
     "test:wipe": "node scripts/repro-score-wipe.mjs",
     "test:wipe:red": "BASE=http://127.0.0.1:8766 EXPECT=red node scripts/repro-score-wipe.mjs",
-    "test:qa": "node scripts/qa-round-owner.mjs && node scripts/qa-scoring-challenge.mjs && node scripts/qa-turn-handoff.mjs && node scripts/qa-malchishnik.mjs && node scripts/qa-dual-spin.mjs && node scripts/qa-dual-award.mjs && node scripts/qa-mid-round-join.mjs && node scripts/qa-groom-salute.mjs && node scripts/qa-groom-salute-peers.mjs && node scripts/qa-control-polish.mjs && node scripts/qa-stuck-open-round.mjs"
+    "test:qa": "node scripts/qa-round-owner.mjs && node scripts/qa-scoring-challenge.mjs && node scripts/qa-turn-handoff.mjs && node scripts/qa-malchishnik.mjs && node scripts/qa-dual-spin.mjs && node scripts/qa-dual-award.mjs && node scripts/qa-mid-round-join.mjs && node scripts/qa-groom-salute.mjs && node scripts/qa-groom-salute-peers.mjs && node scripts/qa-control-polish.mjs && node scripts/qa-stuck-open-round.mjs && node scripts/qa-remove-player.mjs"
   },
   "devDependencies": {
     "playwright": "^1.55.0"

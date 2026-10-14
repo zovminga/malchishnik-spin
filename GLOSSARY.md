@@ -28,8 +28,12 @@ _Avoid_: Active player (for this meaning), «чей ход», spinner (unless sp
 Whose turn it is to spin when there is no open Round. Not the same idea as Round Owner.
 _Avoid_: Round Owner, «кому очки», activePlayer (code name)
 
+**Player**:
+Someone on the Room roster with a display name and a running score. Adding and removing Players changes who can take a turn; night-log lines that already name them stay as history.
+_Avoid_: Participant, member, guest (for the roster seat), участник (UI may say «игроки»)
+
 **Night Progress**:
-How “full” a Room already is: entries in the night log, players on the list, and total scores. A fuller Room beats a emptier one when phones disagree — so a fresh phone with almost nothing does not wipe the party.
+How “full” a Room already is: entries in the night log, Players on the list, and total scores. A fuller Room beats a emptier one when phones disagree — so a fresh phone with almost nothing does not wipe the party. Removing a Player can thin Night Progress, so another phone’s fuller copy may put them back.
 _Avoid_: Richness (code name), freshness, latest write, «кто последний сохранил»
 
 **Groom Salute**:
