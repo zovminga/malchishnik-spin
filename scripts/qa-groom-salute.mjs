@@ -109,8 +109,15 @@ async function main() {
     { timeout: 20000 },
   )
 
+  await page.evaluate(() => {
+    window.__jackpotFlashSeen = false
+  })
   const jackpotFlash = page.waitForFunction(
-    () => document.getElementById('page')?.classList.contains('flash'),
+    () => {
+      const ok = !!document.getElementById('page')?.classList.contains('flash')
+      if (ok) window.__jackpotFlashSeen = true
+      return ok
+    },
     null,
     { timeout: 20000 },
   )
@@ -124,6 +131,7 @@ async function main() {
     sparks: -1,
     fires: 0,
   }
+  const flashSeen = await page.evaluate(() => !!window.__jackpotFlashSeen)
   log(
     'Groom Salute fired on JACKPOT settle',
     stickerInfo.fires === firesBefore + 1,
@@ -138,8 +146,8 @@ async function main() {
   )
   log(
     'JACKPOT banner still used (flash class)',
-    true,
-    'page.flash observed during settle',
+    flashSeen === true,
+    flashSeen ? 'page.flash observed during settle' : 'flash not observed',
   )
   log(
     'Sticker burst is main confetti (no full spark stack)',

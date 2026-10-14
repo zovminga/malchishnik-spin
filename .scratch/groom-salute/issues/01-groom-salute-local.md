@@ -6,9 +6,9 @@
 
 **Status:** ready-for-agent
 
-- [ ] Groom Salute fires only on JACKPOT / spin-settle, not during the whole spin
-- [ ] Burst mixes football, Zvyrk, and Jesus stickers; ~12–20 pieces; ~1s then cleaned up
-- [ ] JACKPOT banner still appears; sticker burst is the main confetti (no messy double full burst)
-- [ ] `Malchishnik.query` (or related helper) exposes salute active/recent signal without breaking existing fields
-- [ ] Playwright single-client check asserts salute signal + sticker presence on JACKPOT
-- [ ] `npm run test:wipe` and `npm run test:qa` pass
+- [x] Groom Salute fires only on JACKPOT / spin-settle, not during the whole spin
+- [x] Burst mixes football, Zvyrk, and Jesus stickers; ~12–20 pieces; ~1s then cleaned up
+- [x] JACKPOT banner still appears; sticker burst is the main confetti (no messy double full burst)
+- [x] `Malchishnik.query` (or related helper) exposes salute active/recent signal without breaking existing fields
+- [x] Playwright single-client check asserts salute signal + sticker presence on JACKPOT
+- [x] `npm run test:wipe` and `npm run test:qa` pass
