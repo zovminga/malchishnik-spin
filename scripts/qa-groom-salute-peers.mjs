@@ -55,8 +55,8 @@ async function waitPeerSalute(page, firesBefore, timeout = 25000) {
       const ok =
         q.groomSaluteActive === true &&
         Number(q.groomSaluteFires || 0) > before &&
-        stickers.length >= 12 &&
-        stickers.length <= 20 &&
+        stickers.length >= 8 &&
+        stickers.length <= 12 &&
         kinds.includes('football') &&
         kinds.includes('zvyrk') &&
         kinds.includes('jesus')
@@ -134,12 +134,12 @@ async function main() {
 
   log(
     'Spinner Groom Salute on JACKPOT settle',
-    !!snapA && snapA.fires === firesA + 1 && snapA.count >= 12,
+    !!snapA && snapA.fires === firesA + 1 && snapA.count >= 8 && snapA.count <= 12,
     snapA ? `fires=${snapA.fires} count=${snapA.count}` : 'no snap',
   )
   log(
     'Second client observes Groom Salute for shared landing',
-    !!snapB && snapB.fires === firesB + 1 && snapB.count >= 12,
+    !!snapB && snapB.fires === firesB + 1 && snapB.count >= 8 && snapB.count <= 12,
     snapB
       ? `fires=${snapB.fires} count=${snapB.count} kinds=${(snapB.kinds || []).join(',')}`
       : 'peer never saw salute',
