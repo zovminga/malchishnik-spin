@@ -74,7 +74,9 @@ export async function ensurePlayers(page, names = ['Azat', 'Alexander']) {
   return gameQuery(page)
 }
 
+/** Score Clear via stable control id (ADR-0005). Legacy #resetGameBtn kept as fallback. */
 export async function resetGame(page) {
-  await page.click('#resetGameBtn')
+  const btn = page.locator('#scoreClearBtn, #resetGameBtn').first()
+  await btn.click()
   await page.waitForTimeout(600)
 }

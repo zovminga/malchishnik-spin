@@ -787,7 +787,7 @@
         <p class="lede">Крути рулетку. Списки и очки общие у всех по одной ссылке.</p>
         <div class="top-actions">
           <button type="button" class="share" id="shareFriendsBtn">Скопировать ссылку</button>
-          <button type="button" class="reset-game" id="resetGameBtn">Обнулить игру</button>
+          <button type="button" class="reset-game" id="scoreClearBtn">Очистить баллы</button>
         </div>
 
         <section class="panel" aria-label="Игроки">
@@ -867,7 +867,7 @@
       <footer class="footer">
         <p>Одна ссылка — одна игра на всех.</p>
         <div class="footer-tools">
-          <span id="buildTag">build 22</span>
+          <span id="buildTag">build 23</span>
           <button type="button" id="hardResetBtn">сброс кэша</button>
         </div>
       </footer>
@@ -1209,7 +1209,7 @@
         }
 
         // -------------------------------------------------------------------------
-        // Seam: RoomState — Room wire shape and Night Progress (ADR-0001).
+        // Seam: RoomState — Room wire shape, Night Progress (ADR-0001), Room Generation (ADR-0005).
         // default / normalize / richness (code name for Night Progress score).
         // Inputs: night log (history), players, total scores — not last-write-wins.
         // -------------------------------------------------------------------------
@@ -1223,6 +1223,8 @@
             // Shared open Round for the Room: Round Owner + scored flag (ADR-0003).
             round: null,
             history: [],
+            // Room Generation: missing/legacy → lowest safe baseline (ADR-0005).
+            roomGeneration: 0,
             // Empty local clocks must not outrank the Room — see scripts/repro-score-wipe.mjs.
             updatedAt: 1,
             updatedBy: clientId,
@@ -1275,6 +1277,9 @@
             base.round = null
           }
           base.history = Array.isArray(raw.history) ? raw.history.slice(0, 20) : []
+          // Room Generation: absent/NaN/negative → 0 (lowest safe baseline).
+          var gen = Number(raw.roomGeneration)
+          base.roomGeneration = Number.isFinite(gen) && gen > 0 ? Math.floor(gen) : 0
           var ts = Number(raw.updatedAt)
           base.updatedAt = Number.isFinite(ts) ? ts : Date.now()
           base.updatedBy = raw.updatedBy || ''
@@ -1351,14 +1356,17 @@
           refreshSpinControl()
         }
 
-        function resetGame() {
-          if (!confirm('Обнулить очки, лог и зависший раунд?\nМеста и задания останутся.')) return
+        // Score Clear: zero scores, clear night log, abort open Round; keep Players + Places.
+        // Bumps Room Generation so the thinner Room sticks (ADR-0005).
+        function scoreClear() {
+          if (!confirm('Очистить баллы, лог и зависший раунд?\nИгроки, места и задания останутся.')) return
           abortRound(false)
           state.players.forEach(function (p) {
             p.score = 0
           })
           state.history = []
           state.activePlayer = 0
+          state.roomGeneration = (Number(state.roomGeneration) || 0) + 1
           touch({ immediate: true })
         }
 
@@ -1501,8 +1509,9 @@
         }
 
         // -------------------------------------------------------------------------
-        // Seam: MergePolicy — write gate + remote decide for the Room (ADR-0001).
-        // Fuller Night Progress wins; open Round token defended until scored.
+        // Seam: MergePolicy — write gate + remote decide for the Room.
+        // Higher Room Generation wins (ADR-0005); equal generation → Night Progress
+        // (ADR-0001) and open Round token defense (ADR-0003).
         // Firebase I/O stays a thin adapter that calls these interfaces.
         // -------------------------------------------------------------------------
         var MergePolicy = {
@@ -1510,9 +1519,14 @@
           shouldWrite: function (current, toWrite, writerId) {
             if (current === null) return toWrite
             var cur = RoomState.normalize(current)
+            var curGen = Number(cur.roomGeneration) || 0
+            var writeGen = Number(toWrite.roomGeneration) || 0
+            // Score Clear / Game Restart: higher Room Generation always sticks.
+            if (writeGen > curGen) return toWrite
+            if (writeGen < curGen) return
             var remoteR = RoomState.richness(cur)
             var localR = RoomState.richness(toWrite)
-            // Never overwrite a Room with more Night Progress using a thinner copy.
+            // Equal Room Generation: never overwrite fuller Night Progress with a thinner copy.
             if (remoteR > localR) return
             if (
               cur.updatedAt > toWrite.updatedAt &&
@@ -1558,6 +1572,16 @@
               return RoomState.richness(local) > 0 ? { action: 'push' } : { action: 'ignore' }
             }
             var next = RoomState.normalize(remote)
+            var localGen = Number(local.roomGeneration) || 0
+            var nextGen = Number(next.roomGeneration) || 0
+            // ADR-0005: higher Room Generation always applies / pushes, even if thinner.
+            if (nextGen > localGen) {
+              return { action: 'apply', state: next }
+            }
+            if (localGen > nextGen) {
+              return { action: 'push' }
+            }
+            // Equal Room Generation: Night Progress + open-Round rules (ADR-0001, ADR-0003).
             // Competing open Rounds: adopt the Room copy even when local clock is newer.
             // shouldWrite already rejected the losing spin; pushing would fork forever.
             if (
@@ -2623,7 +2647,7 @@
           els.editorList.scrollIntoView({ behavior: 'smooth', block: 'start' })
         })
 
-        document.getElementById('resetGameBtn').addEventListener('click', resetGame)
+        document.getElementById('scoreClearBtn').addEventListener('click', scoreClear)
         document.getElementById('hardResetBtn').addEventListener('click', hardResetCache)
 
         els.editorList.addEventListener('change', function (e) {
@@ -2683,7 +2707,8 @@
         })
 
         // Game facade → window.Malchishnik (Playwright test seam).
-        // Exposes Round openness, Turn Player / Round Owner via turnOwner*, Night Progress via richness.
+        // Exposes Round openness, Turn Player / Round Owner via turnOwner*, Night Progress via richness,
+        // Room Generation for Score Clear / Game Restart assertions (ADR-0005).
         var Game = {
           query: function () {
             var buildEl = document.getElementById('buildTag')
@@ -2697,6 +2722,7 @@
                 return { name: p.name, score: p.score }
               }),
               history: (state.history || []).slice(0, 20),
+              roomGeneration: Number(state.roomGeneration) || 0,
               banditLocked: !!(
                 RoundSession.localScored ||
                 (state.round && state.round.scored) ||
